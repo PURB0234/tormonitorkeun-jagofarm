@@ -1,3 +1,4 @@
+export const instant = false;
 
 import { redirect } from "next/navigation";
 import AppShell from "@/app/components/layout/AppShell";
