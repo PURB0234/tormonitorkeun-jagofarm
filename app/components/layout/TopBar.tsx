@@ -75,13 +75,13 @@ export default function TopBar() {
                 })}
             </nav>
 
-            <div className="h-20 w-30">
+            <div className="h-20 w-20">
             </div>
 
             <div className="h-auto pr-3 border-r-2 border-gray-400 w-auto flex flex-row gap-3 justify-center items-center">
-                <Button variant="sync">Sinkronisasi <RotateCcw className="w-3 h-3" /></Button>
-                <Button variant="addSchedule"><Plus className="w-5 h-5" />Tambah Jadwal</Button>
-                <Button variant="addNote"><Plus className="w-5 h-5" />Tambah Catatan</Button>
+                <Button className="!px-2.5 !py-1 !text-xs" variant="sync">Sinkronisasi <RotateCcw className="w-3 h-3" /></Button>
+                <Button className="!px-2.5 !py-1 !text-xs" variant="addSchedule"><Plus className="w-3 h-3" />Tambah Jadwal</Button>
+                <Button className="!px-2.5 !py-1 !text-xs" variant="addNote"><Plus className="w-3 h-3" />Tambah Catatan</Button>
             </div>
 
             <div className="flex flex-row items-center gap-3 ml-5 bg-white">
