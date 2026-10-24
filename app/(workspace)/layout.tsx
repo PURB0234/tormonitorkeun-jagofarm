@@ -1,13 +1,19 @@
 
-import type { ReactNode } from "react";
-import AppShell from "../components/layout/AppShell";
+import { redirect } from "next/navigation";
+import AppShell from "@/app/components/layout/AppShell";
+import { createClient } from "../lib/supabase/server";
 
-type WorkspaceLayoutProps = {
-    children: ReactNode;
-};
-
-export default function WorkspaceLayout({
+export default async function WorkspaceLayout({
     children,
-}: WorkspaceLayoutProps) {
+}: {
+    children: React.ReactNode;
+}) {
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.getUser();
+
+    if (error || !data.user) {
+        redirect("/login");
+    }
+
     return <AppShell>{children}</AppShell>;
 }
