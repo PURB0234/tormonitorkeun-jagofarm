@@ -4,8 +4,12 @@ import {
     FileText, ExternalLink, MapPin, Users, Info
 } from "lucide-react";
 import Card from "@/app/components/ui/Card";
+import { getCurrentUserRole } from "@/app/lib/auth/permissions";
 
-export default function BerandaPage() {
+export default async function BerandaPage() {
+    const role = await getCurrentUserRole();
+    const roleLabel = role === "admin" ? "Admin" : "Member";
+
     return (
         <main className="max-w-7xl mx-auto space-y-6">
             {/* HERO / GREETING */}
@@ -17,7 +21,7 @@ export default function BerandaPage() {
                         <span>•</span>
                         <span className="text-green-700 font-semibold">Musim Tanam Q1</span>
                     </div>
-                    <h1 className="text-2xl font-bold text-gray-900">Selamat pagi, Tim JagoFarm 🌾</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">Selamat pagi, {roleLabel}! 🌾</h1>
                     <p className="text-sm text-gray-600 mt-1">
                         Semua sistem irigasi blok B normal. <strong className="text-gray-900">4 agenda tim</strong> hari ini.
                     </p>

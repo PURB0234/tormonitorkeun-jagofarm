@@ -3,6 +3,7 @@ export const instant = false;
 import { redirect } from "next/navigation";
 import AppShell from "@/app/components/layout/AppShell";
 import { createClient } from "../lib/supabase/server";
+import { getCurrentUserRole } from "../lib/auth/permissions";
 
 export default async function WorkspaceLayout({
     children,
@@ -16,5 +17,11 @@ export default async function WorkspaceLayout({
         redirect("/login");
     }
 
-    return <AppShell>{children}</AppShell>;
+    const role = await getCurrentUserRole();
+
+    if (!role) {
+        redirect("/login");
+    }
+
+    return <AppShell role={role}>{children}</AppShell>;
 }

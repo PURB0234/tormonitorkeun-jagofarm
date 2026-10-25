@@ -7,6 +7,8 @@ import Button from "../ui/Button";
 import { RotateCcw, Plus, LeafIcon } from "lucide-react";
 import LogoutButton from "../LogoutButton";
 import { createClient } from "../../lib/supabase/client";
+import ModalTambahCatatan from "../modal/ModalTambahCatatan";
+
 
 interface OnlineUser {
     id: string;
@@ -23,6 +25,7 @@ const navigation = [
 export default function TopBar() {
     const pathname = usePathname();
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
     useEffect(() => {
         const supabase = createClient();
@@ -102,7 +105,7 @@ export default function TopBar() {
                 <div className="flex flex-row gap-3 items-center pr-4 border-r border-gray-300">
                     <Button className="!px-2.5 !py-1 !text-xs" variant="sync">Sinkronisasi <RotateCcw className="w-3 h-3" /></Button>
                     <Button className="!px-2.5 !py-1 !text-xs" variant="addSchedule"><Plus className="w-3 h-3" />Tambah Jadwal</Button>
-                    <Button className="!px-2.5 !py-1 !text-xs" variant="addNote"><Plus className="w-3 h-3" />Tambah Catatan</Button>
+                    <Button className="!px-2.5 !py-1 !text-xs" variant="addNote" onClick={() => setIsModalOpen(true)}><Plus className="w-3 h-3" />Tambah Catatan</Button>
                 </div>
 
                 {/* Badge Realtime Akun */}
@@ -142,6 +145,11 @@ export default function TopBar() {
 
                 <LogoutButton />
             </div>
+            <ModalTambahCatatan
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+            />
         </header>
     );
+
 }

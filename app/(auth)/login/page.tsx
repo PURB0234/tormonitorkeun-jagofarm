@@ -128,6 +128,13 @@ export default function LoginPage() {
                     >
                         {loading ? "Memproses..." : "Masuk"}
                     </button>
+
+                    <p className="text-center text-xs text-gray-400 pt-2">
+                        Belum punya akun?{" "}
+                        <a href="/register" className="text-green-400 hover:underline">
+                            Daftar di sini
+                        </a>
+                    </p>
                 </form>
             </div>
         </main>
