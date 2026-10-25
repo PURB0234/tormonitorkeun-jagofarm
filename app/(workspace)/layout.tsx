@@ -3,7 +3,6 @@ export const instant = false;
 import { redirect } from "next/navigation";
 import AppShell from "@/app/components/layout/AppShell";
 import { createClient } from "../lib/supabase/server";
-import { getCurrentUserRole } from "../lib/auth/permissions";
 
 export default async function WorkspaceLayout({
     children,
@@ -11,17 +10,22 @@ export default async function WorkspaceLayout({
     children: React.ReactNode;
 }) {
     const supabase = await createClient();
-    const { data, error } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (error || !data.user) {
+    if (!user) {
         redirect("/login");
     }
 
-    const role = await getCurrentUserRole();
+    // Cukup 1 query langsung ke profiles
+    const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
 
-    if (!role) {
+    if (!profile?.role) {
         redirect("/login");
     }
 
-    return <AppShell role={role}>{children}</AppShell>;
+    return <AppShell role={profile.role}>{children}</AppShell>;
 }
