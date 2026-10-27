@@ -2,12 +2,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+// import { useRouter } from "next/navigation";
 import { createClient } from "../../lib/supabase/client";
 
 export default function LoginPage() {
     const supabase = createClient();
-    const router = useRouter();
+    // const router = useRouter();
 
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -33,26 +33,25 @@ export default function LoginPage() {
             return;
         }
 
-        router.replace("/beranda");
-        router.refresh();
+        window.location.href = "/beranda";
     }
 
-    async function handleGoogleLogin() {
-        setError("");
-        setLoading(true);
+    // async function handleGoogleLogin() {
+    //     setError("");
+    //     setLoading(true);
 
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: "google",
-            options: {
-                redirectTo: `${window.location.origin}/auth/callback?next=/beranda`,
-            },
-        });
+    //     const { error } = await supabase.auth.signInWithOAuth({
+    //         provider: "google",
+    //         options: {
+    //             redirectTo: `${window.location.origin}/auth/callback?next=/beranda`,
+    //         },
+    //     });
 
-        if (error) {
-            setError("Login Google gagal. Periksa konfigurasi Supabase.");
-            setLoading(false);
-        }
-    }
+    //     if (error) {
+    //         setError("Login Google gagal. Periksa konfigurasi Supabase.");
+    //         setLoading(false);
+    //     }
+    // }
 
     return (
         <main className="flex min-h-screen items-center justify-center bg-[#0b1110] px-4 text-white">
@@ -67,20 +66,20 @@ export default function LoginPage() {
                     </p>
                 </div>
 
-                <button
+                {/* <button
                     type="button"
                     onClick={handleGoogleLogin}
                     disabled={loading}
                     className="mb-5 w-full rounded-lg border border-white/15 px-4 py-3 font-medium transition hover:bg-white/10 disabled:opacity-50"
                 >
                     Lanjutkan dengan Google
-                </button>
+                </button> */}
 
-                <div className="mb-5 flex items-center gap-3 text-xs text-gray-500">
+                {/* <div className="mb-5 flex items-center gap-3 text-xs text-gray-500">
                     <div className="h-px flex-1 bg-white/10" />
                     ATAU DENGAN EMAIL
                     <div className="h-px flex-1 bg-white/10" />
-                </div>
+                </div> */}
 
                 <form onSubmit={handleEmailLogin} className="space-y-4">
                     <div>

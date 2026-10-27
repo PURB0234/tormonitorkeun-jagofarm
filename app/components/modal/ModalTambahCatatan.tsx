@@ -21,30 +21,28 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
     const [userName, setUserName] = useState("");
     const [members, setMembers] = useState<any[]>([]);
     const [myEmail, setMyEmail] = useState("");
+    const [file, setFile] = useState<File | null>(null);
 
     useEffect(() => {
+        if (!isOpen) return;
         const supabase = createClient();
-        supabase.auth.getUser().then(({
-            data: { user }
-        }) => {
-            if (user) {
-                const name = user.user_metadata?.full_name ??
-                    user.email?.split("@")[0] ?? "Staf Lapangan";
-                setUserName(name);
-            }
-        });
-    }, []);
 
-    useEffect(() => {
-        const supabase = createClient();
         supabase.auth.getUser().then(({ data: { user } }) => {
-            if (user) setMyEmail(user.email ?? "");
+            if (!user) return;
+            const email = user.email ?? "";
+            const name = user.user_metadata?.full_name ?? email.split("@")[0] ?? "Staf Lapangan";
+            setUserName(name);
+            setMyEmail(email);
         });
 
-        supabase.from("profiles").select("*").then(({ data }) => {
-            if (data && data.length > 0) setMembers(data);
-        });
-    }, []);
+        supabase
+            .from("profiles")
+            .select("id, full_name, email")
+            .then(({ data }) => {
+                if (data && data.length > 0) setMembers(data);
+            });
+    }, [isOpen]);
+
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -53,13 +51,45 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
         const formData = new FormData(e.currentTarget);
         const supabase = createClient();
 
+        let lampiranUrl: string | null = null;
+        let lampiranNama: string | null = null;
+
+        if (file) {
+            const ext = file.name.split(".").pop();
+            const filePath = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from("berkas_catatan").upload(filePath, file);
+
+            if (uploadError) {
+                alert("Gagal mengunggah lampiran: " + uploadError.message);
+                setLoading(false);
+                return;
+            }
+
+            const { data: publicUrlData } = supabase.storage
+                .from("berkas_catatan")
+                .getPublicUrl(filePath);
+            lampiranUrl = publicUrlData.publicUrl;
+            lampiranNama = file.name;
+        }
+
+        const selectedMemberId = formData.get("penanggung_jawab_id") as string;
+        const selectedMember = members.find((m) => m.id === selectedMemberId);
+        const selectedMemberName = selectedMember
+            ? (selectedMember.full_name || selectedMember.name || selectedMember.email?.split("@")[0] || "Anggota")
+            : "Anggota";
+
         const { error } = await supabase.from("catatan_pekerjaan").insert({
             judul: formData.get("judul") as string,
-            penanggung_jawab: formData.get("penanggung_jawab") as string,
+            penanggung_jawab_id: selectedMemberId || null,
+            penanggung_jawab: selectedMemberName,
             status: status as "dikerjakan" | "selesai",
             lokasi: formData.get("lokasi") as string,
             deskripsi: formData.get("deskripsi") as string,
-            tautan_eksternal: formData.get("tautan") as string || null
+            tautan_eksternal: formData.get("tautan") as string || null,
+            lampiran_url: lampiranUrl,
+            lampiran_nama: lampiranNama,
         });
 
         setLoading(false);
@@ -116,7 +146,7 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                             </label>
                             <div className="relative">
                                 <select
-                                    name="penanggung_jawab"
+                                    name="penanggung_jawab_id"
                                     className="w-full appearance-none px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white outline-hidden focus:border-green-600"
                                 >
                                     {members.length > 0 ? (
@@ -124,7 +154,7 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                                             const name = m.name || m.full_name || m.email?.split("@")[0] || "Anggota";
                                             const isMe = m.email === myEmail;
                                             return (
-                                                <option key={m.id} value={name}>
+                                                <option key={m.id} value={m.id}>
                                                     {name} {isMe ? "(Saya)" : ""}
                                                 </option>
                                             );
@@ -177,7 +207,7 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                             <MapPin className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                             <select name="lokasi" className="w-full appearance-none pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-xs bg-white outline-hidden focus:border-green-600">
                                 <option>Ko+Lab</option>
-                                <option>Farm Land</option>
+                                <option>Empang balong</option>
                             </select>
                             <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                         </div>
@@ -200,41 +230,46 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                     {/* Upload Berkas */}
                     <div>
                         <div className="flex items-center justify-between mb-1.5">
-                            <label className="font-bold text-gray-800">Upload Bukti & Berkas Lapangan</label>
-                            <span className="text-[11px] text-gray-400 font-mono">Maks. 25MB / file</span>
+                            <label className="font-bold text-gray-800">
+                                Upload Bukti & Berkas Lapangan <span className="text-gray-400 font-normal">(Opsional)</span>
+                            </label>
+                            <span className="text-[11px] text-gray-400 font-mono">Maks. 25MB</span>
                         </div>
-                        <div className="border-2 border-dashed border-gray-300 rounded-xl p-5 text-center bg-gray-50/50 hover:bg-gray-50 cursor-pointer transition-colors">
-                            <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-1.5">
-                                <UploadCloud className="w-5 h-5" />
-                            </div>
-                            <p className="font-semibold text-gray-800">Klik atau seret file ke sini untuk mengunggah bukti pekerjaan</p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">Format JPG, PNG, PDF, atau CSV (dokumen uji, sertifikasi, atau foto sensor)</p>
-                        </div>
-
-                        {/* List Berkas Terunggah */}
-                        <div className="grid grid-cols-2 gap-3 mt-3">
-                            <div className="flex items-center justify-between p-2.5 bg-blue-50/30 border border-blue-100 rounded-lg">
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                    <ImageIcon className="w-4 h-4 text-blue-600 shrink-0" />
+                        <input
+                            type="file"
+                            id="file-bukti"
+                            className="hidden"
+                            onChange={(e) => setFile(e.target.files?.[0] || null)}
+                        />
+                        {!file ? (
+                            <label
+                                htmlFor="file-bukti"
+                                className="border-2 border-dashed border-gray-300 rounded-xl p-5 text-center bg-gray-50/50 hover:bg-gray-50 cursor-pointer transition-colors block"
+                            >
+                                <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-1.5">
+                                    <UploadCloud className="w-5 h-5" />
+                                </div>
+                                <p className="font-semibold text-gray-800">Klik untuk memilih berkas bukti pekerjaan</p>
+                                <p className="text-[11px] text-gray-400 mt-0.5">Format JPG, PNG, PDF, atau CSV</p>
+                            </label>
+                        ) : (
+                            <div className="flex items-center justify-between p-3 bg-blue-50/40 border border-blue-200 rounded-xl">
+                                <div className="flex items-center gap-2.5 overflow-hidden">
+                                    <ImageIcon className="w-5 h-5 text-blue-600 shrink-0" />
                                     <div className="truncate">
-                                        <p className="font-bold text-gray-800 truncate">foto_kondisi_sensor_ec.jpg</p>
-                                        <p className="text-[10px] text-gray-400">1.8 MB • Gambar</p>
+                                        <p className="font-bold text-gray-800 truncate">{file.name}</p>
+                                        <p className="text-[10px] text-gray-400">{(file.size / 1024).toFixed(0)} KB • Siap diunggah</p>
                                     </div>
                                 </div>
-                                <button type="button" className="text-gray-400 hover:text-gray-700 ml-2"><X className="w-4 h-4" /></button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFile(null)}
+                                    className="p-1 text-gray-400 hover:text-red-600 rounded-md"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
                             </div>
-
-                            <div className="flex items-center justify-between p-2.5 bg-blue-50/30 border border-blue-100 rounded-lg">
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                    <FileSpreadsheet className="w-4 h-4 text-green-700 shrink-0" />
-                                    <div className="truncate">
-                                        <p className="font-bold text-gray-800 truncate">log_pembacaan_do_sensor.csv</p>
-                                        <p className="text-[10px] text-gray-400">34 KB • CSV</p>
-                                    </div>
-                                </div>
-                                <button type="button" className="text-gray-400 hover:text-gray-700 ml-2"><X className="w-4 h-4" /></button>
-                            </div>
-                        </div>
+                        )}
                     </div>
 
                     {/* Tautan Grafana */}

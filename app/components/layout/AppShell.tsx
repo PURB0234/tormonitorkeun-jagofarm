@@ -1,6 +1,4 @@
-
 import type { ReactNode } from "react";
-// import SideBar from "./SideBar";
 import TopBar from "./TopBar";
 import MainContent from "./MainContent";
 import type { UserRole } from "../../lib/auth/permissions";
@@ -16,12 +14,8 @@ export default function AppShell({
 }: AppShellProps) {
     return (
         <div className="app-shell">
-            {/* <SideBar /> */}
-
-            {/* <div className="app-main"> */}
-            <TopBar />
+            <TopBar role={role} />
             <MainContent>{children}</MainContent>
-            {/* </div> */}
         </div>
     );
 }

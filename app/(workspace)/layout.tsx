@@ -1,5 +1,3 @@
-export const instant = false;
-
 import { redirect } from "next/navigation";
 import AppShell from "@/app/components/layout/AppShell";
 import { createClient } from "../lib/supabase/server";

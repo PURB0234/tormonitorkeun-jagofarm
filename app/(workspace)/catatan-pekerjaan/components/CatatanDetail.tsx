@@ -3,15 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/app/lib/supabase/client";
-import { Link2, Printer, Edit3, CheckCircle2, Clock, ExternalLink, Loader2, Trash2 } from "lucide-react";
+import { Link2, Printer, Edit3, CheckCircle2, Clock, ExternalLink, Loader2, Trash2, Paperclip } from "lucide-react";
 import type { Catatan } from "./CatatanList";
+import dynamic from "next/dynamic";
+
+const ModalEditCatatan = dynamic(
+    () => import("@/app/components/modal/ModalEditCatatan"),
+    { ssr: false }
+);
 
 export default function CatatanDetail({
     catatan,
     currentUser,
 }: {
     catatan: Catatan | null;
-    currentUser: { role: string; name: string };
+    currentUser: { id: string, role: string; name: string };
 }) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
@@ -25,7 +31,7 @@ export default function CatatanDetail({
     }
 
     const isAdmin = currentUser.role === "admin";
-    const isAssignee = catatan.penanggung_jawab.toLowerCase().includes(currentUser.name.toLowerCase());
+    const isAssignee = catatan.penanggung_jawab_id ? catatan.penanggung_jawab_id === currentUser.id : catatan.penanggung_jawab.toLowerCase().includes(currentUser.name.toLowerCase());
     const canUpdateStatus = isAdmin || isAssignee;
     const canDelete = isAdmin || isAssignee;
 
@@ -80,6 +86,8 @@ export default function CatatanDetail({
         minute: "2-digit",
     });
 
+    const [isModalEditOpen, setIsModalEditOpen] = useState(false);
+
     return (
         <aside className="bg-white border border-gray-200 rounded-xl shadow-xs overflow-hidden flex flex-col max-h-[calc(100vh-140px)] sticky top-20">
             <header className="p-5 border-b border-gray-100 space-y-3">
@@ -119,6 +127,7 @@ export default function CatatanDetail({
                 <div className="flex items-center justify-between pt-1">
                     <button
                         type="button"
+                        onClick={() => setIsModalEditOpen(true)}
                         disabled={!canUpdateStatus}
                         className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 hover:bg-gray-50 rounded-lg text-xs font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -160,7 +169,7 @@ export default function CatatanDetail({
 
                 {catatan.tautan_eksternal && (
                     <section className="space-y-2 pt-2 border-t border-gray-100">
-                        <h3 className="font-bold text-gray-700 uppercase tracking-wider text-[11px]">Tautan Telemetri IoT</h3>
+                        <h3 className="font-bold text-gray-700 uppercase tracking-wider text-[11px]">Tautan</h3>
                         <a
                             href={catatan.tautan_eksternal}
                             target="_blank"
@@ -174,7 +183,53 @@ export default function CatatanDetail({
                         </a>
                     </section>
                 )}
+
+                {catatan.lampiran_url && (
+                    <section className="space-y-2 pt-2 border-t border-gray-100">
+                        <h3 className="font-bold text-gray-700 uppercase tracking-wider text-[11px]">
+                            Bukti & Lampiran Lapangan
+                        </h3>
+                        <a
+                            href={catatan.lampiran_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-between p-2.5 border border-gray-200 rounded-lg bg-gray-50/70 hover:bg-gray-100 transition-colors"
+                        >
+                            <div className="flex items-center gap-2.5 truncate">
+                                <div className="w-7 h-7 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                                    <Paperclip className="w-4 h-4" />
+                                </div>
+                                <div className="truncate">
+                                    <p className="font-semibold text-gray-900 truncate">{catatan.lampiran_nama || "Berkas Bukti Pekerjaan"}</p>
+                                    <p className="text-[10px] text-gray-400">Klik untuk melihat berkas asli</p>
+                                </div>
+                            </div>
+                            <ExternalLink className="w-4 h-4 text-gray-400 shrink-0 ml-2" />
+                        </a>
+                        {/* Preview gambar jika format gambar */}
+                        {catatan.lampiran_url.match(/\.(jpg|jpeg|png|webp)$/i) && (
+                            <div className="mt-2 rounded-lg overflow-hidden border border-gray-200 max-h-48 bg-gray-50">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                    src={catatan.lampiran_url}
+                                    alt="Bukti lapangan"
+                                    className="w-full h-auto object-cover max-h-48"
+                                />
+                            </div>
+                        )}
+                    </section>
+                )}
             </div>
+            {/* Modal Edit diunduh hanya saat diklik */}
+            {isModalEditOpen && (
+                <ModalEditCatatan
+                    isOpen={isModalEditOpen}
+                    onClose={() => setIsModalEditOpen(false)}
+                    catatan={catatan}
+                    currentUser={currentUser}
+                    onDelete={handleDelete}
+                />
+            )}
         </aside>
     );
 }

@@ -1,13 +1,13 @@
-
 import type { Metadata } from "next";
 import "./globals.css";
 import { Plus_Jakarta_Sans } from 'next/font/google';
 
+// Hanya unduh 3 bobot yang benar-benar dipakai di UI
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ['latin'],
   display: 'swap',
-  variable: '--font-jakarta', // Membuat class CSS variable
-  weight: ['300', '400', '500', '600', '700', '800'], // Pilih ketebalan yang dibutuhkan
+  variable: '--font-jakarta',
+  weight: ['400', '600', '700'],
 });
 
 export const metadata: Metadata = {
@@ -21,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id" >
+    <html lang="id">
       <body className={`${plusJakartaSans.className} font-sans`}>{children}</body>
     </html>
   );

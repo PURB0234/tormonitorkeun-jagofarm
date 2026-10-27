@@ -2,12 +2,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Button from "../ui/Button";
 import { RotateCcw, Plus, LeafIcon } from "lucide-react";
 import LogoutButton from "../LogoutButton";
 import { createClient } from "../../lib/supabase/client";
-import ModalTambahCatatan from "../modal/ModalTambahCatatan";
+import dynamic from "next/dynamic";
+import type { UserRole } from "../../lib/auth/permissions";
 
 
 interface OnlineUser {
@@ -16,16 +17,37 @@ interface OnlineUser {
     avatar?: string;
 }
 
-const navigation = [
-    { label: "Beranda", href: "/beranda" },
-    { label: "Catatan Pekerjaan", href: "/catatan-pekerjaan" },
-    { label: "Jadwal Tim", href: "/jadwal-tim" },
-];
+const ModalTambahCatatan = dynamic(
+    () =>
+        import("../modal/ModalTambahCatatan"),
+    { ssr: false }
+);
 
-export default function TopBar() {
+export default function TopBar({ role }: { role?: UserRole }) {
     const pathname = usePathname();
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const router = useRouter();
+    const [syncState, setSyncState] = useState<"idle" | "syncing" | "synced">("idle");
+
+    const navigation = [
+        { label: "Beranda", href: "/beranda" },
+        { label: "Catatan Pekerjaan", href: "/catatan-pekerjaan" },
+        { label: "Jadwal Tim", href: "/jadwal-tim" },
+        ...(role === "admin" ? [{ label: "Admin Panel", href: "/admin" }] : []),
+    ];
+
+    const handleSync = () => {
+        if (syncState === "syncing") return;
+
+        setSyncState("syncing");
+        router.refresh();
+
+        setTimeout(() => {
+            setSyncState("synced");
+            setTimeout(() => setSyncState("idle"), 1500);
+        }, 600);
+    }
 
     useEffect(() => {
         const supabase = createClient();
@@ -75,7 +97,7 @@ export default function TopBar() {
             <div className="flex flex-row items-center gap-8 h-full">
                 <div className="flex flex-row items-center gap-2">
                     <LeafIcon className="text-green-800 w-5 h-5" />
-                    <h3 className="font-bold text-gray-900">JagoFarm TaskFlow</h3>
+                    <h3 className="font-bold text-gray-900">JagoFarm-keun</h3>
                 </div>
 
                 <nav className="flex flex-row gap-2 items-center h-full">
@@ -103,7 +125,27 @@ export default function TopBar() {
             {/* KANAN: Aksi + Realtime Badges */}
             <div className="flex flex-row items-center gap-4">
                 <div className="flex flex-row gap-3 items-center pr-4 border-r border-gray-300">
-                    <Button className="!px-2.5 !py-1 !text-xs" variant="sync">Sinkronisasi <RotateCcw className="w-3 h-3" /></Button>
+                    <Button
+                        type="button"
+                        onClick={handleSync}
+                        disabled={syncState === "syncing"}
+                        className="!px-2.5 !py-1 !text-xs transition-all cursor-pointer disabled:opacity-60"
+                        variant="sync"
+                        title="Klik untuk menyinkronkan data terbaru"
+                    >
+                        <span>
+                            {syncState === "syncing"
+                                ? "Menyinkronkan..."
+                                : syncState === "synced"
+                                    ? "Tersinkron!"
+                                    : "Sinkronisasi"}
+                        </span>
+                        <RotateCcw
+                            className={`w-3 h-3 transition-transform ${syncState === "syncing" ? "animate-spin text-green-700" : ""
+                                }`}
+                        />
+                    </Button>
+
                     <Button className="!px-2.5 !py-1 !text-xs" variant="addSchedule"><Plus className="w-3 h-3" />Tambah Jadwal</Button>
                     <Button className="!px-2.5 !py-1 !text-xs" variant="addNote" onClick={() => setIsModalOpen(true)}><Plus className="w-3 h-3" />Tambah Catatan</Button>
                 </div>
@@ -145,10 +187,12 @@ export default function TopBar() {
 
                 <LogoutButton />
             </div>
-            <ModalTambahCatatan
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-            />
+            {isModalOpen && (
+                <ModalTambahCatatan
+                    isOpen={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                />
+            )}
         </header>
     );
 

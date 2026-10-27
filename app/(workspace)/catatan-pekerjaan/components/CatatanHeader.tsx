@@ -28,7 +28,7 @@ export default function CatatanHeader() {
                             className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-gray-300 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-green-600"
                         />
                     </div>
-                    <button className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50">
+                    {/* <button className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50">
                         <span>Semua Anggota</span>
                         <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
                     </button>
@@ -36,7 +36,7 @@ export default function CatatanHeader() {
                         <button className="px-2.5 py-1 bg-white rounded-md font-semibold text-gray-900 shadow-2xs">Semua (18)</button>
                         <button className="px-2.5 py-1 text-gray-600 hover:text-gray-900 font-medium">Dikerjakan (4)</button>
                         <button className="px-2.5 py-1 text-gray-600 hover:text-gray-900 font-medium">Selesai (14)</button>
-                    </div>
+                    </div> */}
                 </div>
 
                 <div className="flex items-center gap-2 text-xs text-gray-500">

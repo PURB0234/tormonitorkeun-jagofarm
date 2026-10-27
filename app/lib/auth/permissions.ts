@@ -1,15 +1,13 @@
-
 import "server-only";
-
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "../../lib/supabase/server";
 
 export type UserRole = "admin" | "member";
 
-export async function getCurrentUserRole(): Promise<UserRole | null> {
+export const getCurrentUserRole = cache(async (): Promise<UserRole | null> => {
     const supabase = await createClient();
 
-    // Pastikan pengguna benar-benar login
     const {
         data: { user },
         error: userError,
@@ -19,7 +17,6 @@ export async function getCurrentUserRole(): Promise<UserRole | null> {
         return null;
     }
 
-    // Ambil role dari profil pengguna
     const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role")
@@ -35,7 +32,7 @@ export async function getCurrentUserRole(): Promise<UserRole | null> {
     }
 
     return profile.role as UserRole;
-}
+});
 
 export async function requireAdmin(): Promise<void> {
     const role = await getCurrentUserRole();
