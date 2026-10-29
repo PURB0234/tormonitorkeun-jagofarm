@@ -49,6 +49,10 @@ body {
   scrollbar-width: none;
   -ms-scrollbar-style: none;
   -ms-overflow-style: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* font-smoothing: subpixel-antialiased; */
+  -moz-osx-font-smoothing: grayscale;
 }
 
 html::-webkit-scrollbar {
@@ -60,7 +64,6 @@ body::-webkit-scrollbar {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
-  -webkit-font-smoothing: antialiased;
   display: none;
 }
 

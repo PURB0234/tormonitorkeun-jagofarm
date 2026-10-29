@@ -1,6 +1,3 @@
-import CatatanHeader from "./components/CatatanHeader";
-import CatatanList from "./components/CatatanList";
-import CatatanDetail from "./components/CatatanDetail";
 import { createClient } from "@/app/lib/supabase/server";
 import CatatanWorkspace from "./components/CatatanWorkspace";
 
@@ -40,13 +37,13 @@ export default async function CatatanPekerjaanPage({
     //     .select("*")
     //     .order("created_at", { ascending: false });
 
-    const activeCatatan = id
-        ? catatans?.find((c) => c.id === id) ?? catatans?.[0]
-        : catatans?.[0];
+    // const activeCatatan = id
+    //     ? catatans?.find((c) => c.id === id) ?? catatans?.[0]
+    //     : catatans?.[0];
 
     return (
         <main className="max-w-7xl mx-auto space-y-6">
-            <CatatanHeader />
+            {/* <CatatanHeader /> */}
             <CatatanWorkspace
                 catatans={catatans}
                 initialId={id}

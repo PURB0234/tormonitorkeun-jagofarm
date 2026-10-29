@@ -161,7 +161,7 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                                         })
                                     ) : (
                                         <option value={myEmail.split("@")[0] || "Memuat..."}>
-                                            {myEmail.split("@")[0] || "Memuat..."} (Saya)
+                                            {myEmail.split("@")[0] || "Memuat..." + ("Saya")}
                                         </option>
                                     )}
                                 </select>
