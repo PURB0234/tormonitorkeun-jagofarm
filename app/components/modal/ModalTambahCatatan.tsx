@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/app/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { DAFTAR_LOKASI } from "@/app/lib/constants";
 
 type ModalProps = {
     isOpen: boolean;
@@ -205,9 +206,16 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                         </label>
                         <div className="relative">
                             <MapPin className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                            <select name="lokasi" className="w-full appearance-none pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-xs bg-white outline-hidden focus:border-green-600">
-                                <option>Ko+Lab</option>
-                                <option>Empang balong</option>
+                            <select
+                                name="lokasi"
+                                required
+                                className="w-full appearance-none pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-xs bg-white text-gray-900 outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600 cursor-pointer"
+                            >
+                                {DAFTAR_LOKASI.map((loc) => (
+                                    <option key={loc} value={loc}>
+                                        {loc}
+                                    </option>
+                                ))}
                             </select>
                             <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                         </div>

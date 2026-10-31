@@ -251,7 +251,7 @@ export default function JadwalTimPage() {
                 penanggung_jawab: item.penanggung_jawab_nama,
                 penanggung_jawab_id: item.penanggung_jawab_id || null,
                 status: "selesai",
-                lokasi: item.lokasi || "Area Kebun",
+                lokasi: item.lokasi || "Ko+Lab",
                 deskripsi:
                     item.catatan ||
                     "Kegiatan telah dilaksanakan sesuai jadwal operasional (" +
@@ -307,6 +307,19 @@ export default function JadwalTimPage() {
             supabase.removeChannel(channel);
         };
     }, [fetchJadwal]);
+
+    useEffect(() => {
+        const onGlobalSync = () => {
+            fetchJadwal();
+            fetchActiveMonths();
+            fetchCompletedMonths();
+        };
+
+        window.addEventListener("app:sync", onGlobalSync);
+        return () => {
+            window.removeEventListener("app:sync", onGlobalSync);
+        };
+    }, [fetchJadwal, fetchActiveMonths, fetchCompletedMonths]);
 
     useEffect(() => {
         const supabase = createClient();

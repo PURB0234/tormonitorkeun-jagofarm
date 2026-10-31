@@ -41,13 +41,20 @@ export default function TopBar({ role }: { role?: UserRole }) {
         if (syncState === "syncing") return;
 
         setSyncState("syncing");
+
+        // 1. Refresh Server Components (beranda & catatan-pekerjaan)
         router.refresh();
+
+        // 2. Broadcast sinyal refresh ke Client Components (jadwal-tim, dll)
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("app:sync"));
+        }
 
         setTimeout(() => {
             setSyncState("synced");
             setTimeout(() => setSyncState("idle"), 1500);
         }, 600);
-    }
+    };
 
     useEffect(() => {
         const supabase = createClient();
@@ -63,6 +70,7 @@ export default function TopBar({ role }: { role?: UserRole }) {
             channel = supabase.channel("online-presence", {
                 config: { presence: { key: user.id } },
             });
+
 
             channel
                 .on("presence", { event: "sync" }, () => {
@@ -82,6 +90,28 @@ export default function TopBar({ role }: { role?: UserRole }) {
         };
     }, []);
 
+    useEffect(() => {
+        const supabase = createClient();
+
+        // Listener perubahan di database jadwal & catatan
+        const globalChannel = supabase
+            .channel("global-db-changes")
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "jadwal_kegiatan" },
+                () => handleSync()
+            )
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "catatan_pekerjaan" },
+                () => handleSync()
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(globalChannel);
+        };
+    }, []);
     // Maksimal 2 badge ditampilkan, sisanya masuk format +N
     const displayedUsers = onlineUsers.slice(0, 2);
     const remainingCount = onlineUsers.length - 2;

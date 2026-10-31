@@ -9,6 +9,7 @@ import {
 import { createClient } from "@/app/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import type { Catatan } from "../../(workspace)/catatan-pekerjaan/components/CatatanList";
+import { DAFTAR_LOKASI } from "@/app/lib/constants";
 
 type ModalEditProps = {
     isOpen: boolean;
@@ -227,10 +228,17 @@ export default function ModalEditCatatan({
                             <select
                                 name="lokasi"
                                 defaultValue={catatan.lokasi}
-                                className="w-full appearance-none pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-xs bg-white outline-hidden focus:border-green-600"
+                                required
+                                className="w-full appearance-none pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-xs bg-white text-gray-900 outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600 cursor-pointer"
                             >
-                                <option>Ko+Lab</option>
-                                <option>Empang balong</option>
+                                {DAFTAR_LOKASI.map((loc) => (
+                                    <option key={loc} value={loc}>
+                                        {loc}
+                                    </option>
+                                ))}
+                                {catatan.lokasi && !(DAFTAR_LOKASI as readonly string[]).includes(catatan.lokasi) && (
+                                    <option value={catatan.lokasi}>{catatan.lokasi}</option>
+                                )}
                             </select>
                             <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                         </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, Calendar, MapPin, Check, ChevronDown, Loader2 } from "lucide-react";
 import { createClient } from "@/app/lib/supabase/client";
+import { DAFTAR_LOKASI } from "@/app/lib/constants";
 
 type JadwalData = {
     id: string;
@@ -338,11 +339,14 @@ export default function ModalEditJadwal({ isOpen, jadwal, onClose, onSuccess }: 
                                     onChange={(e) => setLokasi(e.target.value)}
                                     className="w-full appearance-none pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-xs bg-white text-gray-900 focus:outline-hidden focus:ring-1 focus:ring-green-700 cursor-pointer"
                                 >
-                                    <option value="Ko+Lab">Ko+Lab</option>
-                                    <option value="Empang balong">Empang balong</option>
-                                    <option value="Greenhouse 01">Greenhouse 01</option>
-                                    <option value="Greenhouse 02">Greenhouse 02</option>
-                                    <option value="Rumah Pompa Blok B">Rumah Pompa Blok B</option>
+                                    {DAFTAR_LOKASI.map((loc) => (
+                                        <option key={loc} value={loc}>
+                                            {loc}
+                                        </option>
+                                    ))}
+                                    {lokasi && !(DAFTAR_LOKASI as readonly string[]).includes(lokasi) && (
+                                        <option value={lokasi}>{lokasi}</option>
+                                    )}
                                 </select>
                                 <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                             </div>
