@@ -22,7 +22,7 @@ export default function CatatanHeader({
         <header className="space-y-4 p-4 border border-gray-200 bg-white rounded-xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Catatan Pekerjaan Tim JagoFarm</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">Catatan Pekerjaan Tim</h1>
                     <p className="text-xs text-gray-500 mt-1">
                         Dokumentasi operasional, progres teknis, dan bukti pekerjaan harian tim lapangan.
                     </p>

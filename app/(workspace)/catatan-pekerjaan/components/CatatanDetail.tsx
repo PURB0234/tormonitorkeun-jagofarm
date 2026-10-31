@@ -21,6 +21,7 @@ export default function CatatanDetail({
 }) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
+    const [isModalEditOpen, setIsModalEditOpen] = useState(false);
 
     if (!catatan) {
         return (
@@ -86,7 +87,6 @@ export default function CatatanDetail({
         minute: "2-digit",
     });
 
-    const [isModalEditOpen, setIsModalEditOpen] = useState(false);
 
     return (
         <aside className="bg-white border border-gray-200 rounded-xl shadow-xs overflow-hidden flex flex-col max-h-[calc(100vh-140px)] sticky top-20">

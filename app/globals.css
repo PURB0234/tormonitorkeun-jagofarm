@@ -28,7 +28,7 @@ body {
 @import "tailwindcss";
 
 :root {
-  --background: #f5f8f5;
+  --background: #f8fafc;
   --surface: #ffffff;
   --foreground: #1c3026;
   --muted: #718078;
@@ -53,6 +53,8 @@ body {
   text-rendering: optimizeLegibility;
   /* font-smoothing: subpixel-antialiased; */
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--background);
+  color: var(--foreground);
 }
 
 html::-webkit-scrollbar {
@@ -272,6 +274,7 @@ a {
   min-height: calc(100vh - 88px);
   margin: 0 auto;
   padding: 30px 34px;
+  background-color: var(--background);
 }
 
 @media (max-width: 900px) {

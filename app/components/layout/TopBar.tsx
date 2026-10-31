@@ -97,7 +97,7 @@ export default function TopBar({ role }: { role?: UserRole }) {
             <div className="flex flex-row items-center gap-8 h-full">
                 <div className="flex flex-row items-center gap-2">
                     <LeafIcon className="text-green-800 w-5 h-5" />
-                    <h3 className="font-bold text-gray-900">JagoFarm-keun</h3>
+                    <h3 className="font-bold text-gray-900">JagoFarm-Keun</h3>
                 </div>
 
                 <nav className="flex flex-row gap-2 items-center h-full">
@@ -146,7 +146,7 @@ export default function TopBar({ role }: { role?: UserRole }) {
                         />
                     </Button>
 
-                    <Button className="!px-2.5 !py-1 !text-xs" variant="addSchedule"><Plus className="w-3 h-3" />Tambah Jadwal</Button>
+                    {/* <Button className="!px-2.5 !py-1 !text-xs" variant="addSchedule"><Plus className="w-3 h-3" />Tambah Jadwal</Button> */}
                     <Button className="!px-2.5 !py-1 !text-xs" variant="addNote" onClick={() => setIsModalOpen(true)}><Plus className="w-3 h-3" />Tambah Catatan</Button>
                 </div>
 
