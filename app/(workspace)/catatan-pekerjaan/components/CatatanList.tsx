@@ -16,6 +16,7 @@ export type Catatan = {
     tautan_eksternal?: string | null;
     lampiran_url?: string | null;
     lampiran_nama?: string | null;
+    tag?: string | null;
     tanggal?: string | null;
     tanggal_selesai?: string | null;
     waktu_mulai?: string | null;
@@ -45,17 +46,31 @@ export default function CatatanList({
         setPage(1);
     }
 
-    const displayCatatans = filter === "semua"
+    const isMyTask = (c: Catatan) => {
+        const pj = (c.penanggung_jawab || "").toLowerCase();
+        const tag = (c.tag || "").toLowerCase();
+        // 1. Jika Seluruh Tim, tertaut ke semua user
+        if (pj.includes("seluruh tim") || pj.includes("tim") || tag.includes("tim")) {
+            return true;
+        }
+        // 2. Jika ID penanggung jawab cocok
+        if (c.penanggung_jawab_id && c.penanggung_jawab_id === currentUser.id) {
+            return true;
+        }
+        // 3. Jika nama user cocok (lengkap atau nama depan)
+        const myName = (currentUser.name || "").toLowerCase().trim();
+        const myFirst = myName.split(" ")[0];
+        if (myName && pj.includes(myName)) return true;
+        if (myFirst && myFirst.length > 2 && pj.includes(myFirst)) return true;
+        return false;
+    };
+
+    const displayedCatatans = filter === "semua"
         ? catatans
-        : catatans.filter((c) =>
-            c.penanggung_jawab_id
-                ? c.penanggung_jawab_id === currentUser.id
-                : c.penanggung_jawab.toLowerCase().includes(currentUser.name.toLowerCase())
-        );
+        : catatans.filter(isMyTask);
 
-
-    const totalPages = Math.ceil(displayCatatans.length / PAGE_SIZE) || 1;
-    const paginatedCatatans = displayCatatans.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    const totalPages = Math.ceil(displayedCatatans.length / PAGE_SIZE) || 1;
+    const paginatedCatatans = displayedCatatans.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
     useEffect(() => {
         const supabase = createClient();
@@ -66,12 +81,6 @@ export default function CatatanList({
         ).subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [router]);
-
-    const displayedCatatans = filter === "semua"
-        ? catatans
-        : catatans.filter((c) =>
-            c.penanggung_jawab.toLowerCase().includes(currentUser.name.toLowerCase())
-        );
 
     return (
         <section className="space-y-3">
@@ -132,7 +141,7 @@ export default function CatatanList({
                         onClick={() => handleFilterChange("saya")}
                         className={`px-3 py-1 rounded-md font-semibold transition-all ${filter === "saya" ? "bg-white text-gray-900 shadow-2xs" : "text-gray-500 hover:text-gray-700"}`}
                     >
-                        Tugas Saya ({catatans.filter((c) => c.penanggung_jawab.toLowerCase().includes(currentUser.name.toLowerCase())).length})
+                        Tugas Saya ({catatans.filter(isMyTask).length})
                     </button>
 
                 </div>

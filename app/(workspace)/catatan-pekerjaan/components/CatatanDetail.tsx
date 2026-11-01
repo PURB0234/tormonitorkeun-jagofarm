@@ -7,8 +7,8 @@ import { Link2, Printer, Edit3, CheckCircle2, Clock, ExternalLink, Loader2, Tras
 import type { Catatan } from "./CatatanList";
 import dynamic from "next/dynamic";
 
-const ModalEditCatatan = dynamic(
-    () => import("@/app/components/modal/ModalEditCatatan"),
+const ModalEditKegiatan = dynamic(
+    () => import("@/app/components/modal/ModalEditKegiatan"),
     { ssr: false }
 );
 
@@ -32,7 +32,13 @@ export default function CatatanDetail({
     }
 
     const isAdmin = currentUser.role === "admin";
-    const isAssignee = catatan.penanggung_jawab_id ? catatan.penanggung_jawab_id === currentUser.id : catatan.penanggung_jawab.toLowerCase().includes(currentUser.name.toLowerCase());
+    const pjLower = (catatan.penanggung_jawab || "").toLowerCase();
+    const tagLower = (catatan.tag || "").toLowerCase();
+    const isTeam = pjLower.includes("seluruh tim") || pjLower.includes("tim") || tagLower.includes("tim");
+    const myName = (currentUser.name || "").toLowerCase().trim();
+    const myFirst = myName.split(" ")[0];
+    const isNameMatch = (myName && pjLower.includes(myName)) || (myFirst && myFirst.length > 2 && pjLower.includes(myFirst));
+    const isAssignee = isTeam || (catatan.penanggung_jawab_id ? catatan.penanggung_jawab_id === currentUser.id : isNameMatch);
     const canUpdateStatus = isAdmin || isAssignee;
     const canDelete = isAdmin || isAssignee;
 
@@ -137,7 +143,7 @@ export default function CatatanDetail({
                         type="button"
                         onClick={() => setIsModalEditOpen(true)}
                         disabled={!canUpdateStatus}
-                        className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 hover:bg-gray-50 rounded-lg text-xs font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 hover:bg-gray-50 rounded-lg text-xs font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                     >
                         <Edit3 className="w-3.5 h-3.5" /> Edit Catatan
                     </button>
@@ -146,7 +152,7 @@ export default function CatatanDetail({
                         onClick={handleToggleStatus}
                         disabled={loading || !canUpdateStatus}
                         title={!canUpdateStatus ? "Hanya penanggung jawab atau Admin yang dapat mengubah status" : ""}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#1E5E35] hover:bg-green-800 text-white rounded-lg text-xs font-semibold shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#1E5E35] hover:bg-green-800 text-white rounded-lg text-xs font-semibold shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     >
                         {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                         {catatan.status === "selesai" ? "Tandai Dikerjakan" : "Tandai Selesai"}
@@ -230,7 +236,7 @@ export default function CatatanDetail({
             </div>
             {/* Modal Edit diunduh hanya saat diklik */}
             {isModalEditOpen && (
-                <ModalEditCatatan
+                <ModalEditKegiatan
                     isOpen={isModalEditOpen}
                     onClose={() => setIsModalEditOpen(false)}
                     catatan={catatan}

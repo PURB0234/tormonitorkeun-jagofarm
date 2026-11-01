@@ -7,9 +7,9 @@ import CatatanWorkspace from "./components/CatatanWorkspace";
 export default async function CatatanPekerjaanPage({
     searchParams,
 }: {
-    searchParams: Promise<{ id?: string }>;
+    searchParams: Promise<{ id?: string; view?: string }>;
 }) {
-    const { id } = await searchParams;
+    const { id, view } = await searchParams;
     const supabase = await createClient();
 
     // Sesi & role user saat ini
@@ -40,6 +40,7 @@ export default async function CatatanPekerjaanPage({
         tautan_eksternal: row.tautan_eksternal || null,
         lampiran_url: row.lampiran_url || null,
         lampiran_nama: row.lampiran_nama || null,
+        tag: row.tag || null,
         tanggal: row.tanggal,
         tanggal_selesai: row.tanggal_selesai || row.tanggal,
         waktu_mulai: row.waktu_mulai,
@@ -67,6 +68,7 @@ export default async function CatatanPekerjaanPage({
             <CatatanWorkspace
                 catatans={catatans}
                 initialId={id}
+                initialView={(view as any) || "catatan"}
                 currentUser={currentUser}
             />
             {/* <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

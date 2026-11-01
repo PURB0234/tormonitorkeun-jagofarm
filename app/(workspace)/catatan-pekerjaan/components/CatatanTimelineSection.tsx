@@ -1,36 +1,30 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback, useRef } from "react"
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import {
     ChevronLeft,
     ChevronRight,
-    Calendar,
-    Plus,
     MapPin,
     Sprout,
     Droplets,
     Loader2,
     Trash2,
     CheckCircle2,
-    Printer,
-    BarChart3,
     RefreshCw,
     CheckCheck,
 } from "lucide-react";
 import { createClient } from "@/app/lib/supabase/client";
-import ModalTambahJadwal from "@/app/components/modal/ModalTambahJadwal";
-import ModalEditJadwal from "@/app/components/modal/ModalEditJadwal";
-import GanttChartTim from "./components/GanttChartTim";
-import LaporanPdfPrint from "./components/LaporanPdfPrint";
 import { useRouter } from "next/navigation";
+import GanttChartTim from "./GanttChartTim";
+import LaporanPdfPrint from "./LaporanPdfPrint";
 
-type JadwalRow = {
+export type JadwalRow = {
     id: string;
     nama_kegiatan: string;
     penanggung_jawab_id?: string | null;
     penanggung_jawab_nama: string;
     tanggal: string; // YYYY-MM-DD
-    tanggal_selesai?: string | null; // Tanggal Selesai (YYYY-MM-DD)
+    tanggal_selesai?: string | null;
     waktu_mulai: string;
     waktu_selesai: string;
     lokasi?: string | null;
@@ -47,23 +41,21 @@ type ProfileMember = {
     email: string;
 };
 
-// Helper: Menghitung Senin dari minggu tanggal target
-function getMonday(d: Date): Date {
-    const date = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0);
-    const day = date.getDay();
-    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    date.setDate(diff);
-    return date;
+function getMonday(date: Date): Date {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const mon = new Date(d.setDate(diff));
+    mon.setHours(0, 0, 0, 0);
+    return mon;
 }
 
-// Helper: Tambah hari
-function addDays(d: Date, days: number): Date {
-    const res = new Date(d);
+function addDays(date: Date, days: number): Date {
+    const res = new Date(date);
     res.setDate(res.getDate() + days);
     return res;
 }
 
-// Helper: Format YYYY-MM-DD lokal
 function toIsoDate(d: Date): string {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -78,15 +70,19 @@ const BULAN_NAMES = [
 
 const HARI_NAMES = ["SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU", "MINGGU"];
 
-export default function JadwalTimPage() {
+type CatatanTimelineSectionProps = {
+    viewMode: "kalender" | "gantt";
+    onSelectTask: (task: JadwalRow) => void;
+};
+
+export default function CatatanTimelineSection({
+    viewMode,
+    onSelectTask,
+}: CatatanTimelineSectionProps) {
     const router = useRouter();
-    const [viewMode, setViewMode] = useState<"penjadwalan" | "gantt">("penjadwalan");
     const [selectedStaff, setSelectedStaff] = useState<string>("Semua");
     const [members, setMembers] = useState<ProfileMember[]>([]);
-    const [isModalOpen, setIsModalOpen] = useState(false);
 
-    // Default mulai dari 24 Feb 2025 sesuai mockup
-    // const [anchorDate, setAnchorDate] = useState<Date>(() => new Date(2025, 1, 24));
     const [anchorDate, setAnchorDate] = useState<Date>(() => new Date());
     const [jadwals, setJadwals] = useState<JadwalRow[]>([]);
     const [loading, setLoading] = useState(true);
@@ -94,33 +90,30 @@ export default function JadwalTimPage() {
     const monday = useMemo(() => getMonday(anchorDate), [anchorDate]);
     const sunday = useMemo(() => addDays(monday, 6), [monday]);
 
-    // State untuk drag & drop
+    // Drag & Drop State
     const draggedIdRef = useRef<string | null>(null);
     const [draggableId, setDraggableId] = useState<string | null>(null);
     const [draggedItem, setDraggedItem] = useState<JadwalRow | null>(null);
     const [isOverTrash, setIsOverTrash] = useState(false);
-    const [activeMonths, setActiveMonths] = useState<{ key: string, label: string; date: Date; count: number }[]>([]);
-    const [selectedMonthKey, setSelectedMonthKey] = useState<string>("");
-
-    const [filterStatus, setFilterStatus] = useState<"semua" | "terjadwal" | "selesai">("terjadwal");
-    const [selectedJadwalToEdit, setSelectedJadwalToEdit] = useState<JadwalRow | null>(null);
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isOverDone, setIsOverDone] = useState(false);
-
-    // Bulan saat ini (real-time) untuk proteksi bulan lampau
-    const realNow = new Date();
-    const realCurrentYear = realNow.getFullYear();
-    const realCurrentMonth = realNow.getMonth(); // 0-indexed
-
-    const [completedMonths, setCompletedMonths] = useState<{ key: string; label: string; date: Date; count: number }[]>([]);
-    const [selectedCompletedMonthKey, setSelectedCompletedMonthKey] = useState<string>("");
     const [isOverUpdate, setIsOverUpdate] = useState(false);
     const [isOverDoneUpdate, setIsOverDoneUpdate] = useState(false);
+    const [isOverRevert, setIsOverRevert] = useState(false);
+
+    // Bulan Filter State
+    const [activeMonths, setActiveMonths] = useState<{ key: string; label: string; date: Date; count: number }[]>([]);
+    const [selectedMonthKey, setSelectedMonthKey] = useState<string>("");
+    const [completedMonths, setCompletedMonths] = useState<{ key: string; label: string; date: Date; count: number }[]>([]);
+    const [selectedCompletedMonthKey, setSelectedCompletedMonthKey] = useState<string>("");
+    const [filterStatus, setFilterStatus] = useState<"semua" | "terjadwal" | "selesai">("terjadwal");
+
+    // Real Now untuk proteksi bulan lampau
+    const realNow = new Date();
+    const realCurrentYear = realNow.getFullYear();
+    const realCurrentMonth = realNow.getMonth();
 
     const fetchActiveMonths = useCallback(async () => {
         const supabase = createClient();
-
-        // Hanya hitung agenda yang belum selesai agar bulan beragenda mencerminkan task aktif
         const { data } = await supabase
             .from("jadwal_kegiatan")
             .select("tanggal")
@@ -168,8 +161,6 @@ export default function JadwalTimPage() {
 
     const fetchCompletedMonths = useCallback(async () => {
         const supabase = createClient();
-
-        // Ambil agenda yang sudah selesai
         const { data } = await supabase
             .from("jadwal_kegiatan")
             .select("tanggal")
@@ -215,50 +206,41 @@ export default function JadwalTimPage() {
         fetchCompletedMonths();
     }, [fetchCompletedMonths]);
 
-    // Fungsi eksekusi hapus ke Supabase
+    // Hapus Kegiatan
     const handleDeleteJadwal = async (id: string, nama: string) => {
-        // 1. Hapus seketika dari state UI
         setJadwals((prev) => prev.filter((item) => item.id !== id));
-
         const supabase = createClient();
-
-        // 2. Hapus dari tabel jadwal_kegiatan (Single Source of Truth)
         const { error } = await supabase.from("jadwal_kegiatan").delete().eq("id", id);
 
         if (error) {
             alert("Gagal menghapus dari database: " + error.message);
             fetchJadwal();
-            fetchActiveMonths();
-            fetchCompletedMonths();
         } else {
             fetchActiveMonths();
             fetchCompletedMonths();
         }
 
-        // 3. Sinkronkan modul seketika
         router.refresh();
         if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent("app:sync"));
         }
     };
 
-    // 1. DONE SAJA: Mengubah status jadwal jadi selesai
+    // 1. Selesai (Done)
     const handleCompleteJadwal = async (item: JadwalRow) => {
         const supabase = createClient();
-
         setJadwals((prev) =>
             prev.map((j) => (j.id === item.id ? { ...j, status: "selesai" } : j))
         );
 
-        const { error: updateError } = await supabase
+        const { error } = await supabase
             .from("jadwal_kegiatan")
             .update({ status: "selesai" })
             .eq("id", item.id);
 
-        if (updateError) {
-            alert("Gagal mengubah status: " + updateError.message);
+        if (error) {
+            alert("Gagal mengubah status: " + error.message);
             fetchJadwal();
-            fetchCompletedMonths();
             return;
         }
 
@@ -270,10 +252,9 @@ export default function JadwalTimPage() {
         router.refresh();
     };
 
-    // 2. UPDATE SAJA: Kembalikan status jadwal ke 'terjadwal' (dikerjakan)
+    // 2. Update Catatan (Tetap Terjadwal)
     const handleUpdateOnlyToCatatan = async (item: JadwalRow) => {
         const supabase = createClient();
-
         setJadwals((prev) =>
             prev.map((j) => (j.id === item.id ? { ...j, status: "terjadwal" } : j))
         );
@@ -291,10 +272,9 @@ export default function JadwalTimPage() {
         }
     };
 
-    // 3. DONE + UPDATE: Mengubah status jadwal menjadi 'selesai'
+    // 3. Done + Update
     const handleDoneAndUpdateCatatan = async (item: JadwalRow) => {
         const supabase = createClient();
-
         setJadwals((prev) =>
             prev.map((j) => (j.id === item.id ? { ...j, status: "selesai" } : j))
         );
@@ -312,7 +292,33 @@ export default function JadwalTimPage() {
         }
     };
 
-    // Ambil seluruh data jadwal dari Supabase (lengkap untuk Kanban mingguan & Gantt chart timeline)
+    // 4. Kembalikan ke Dikerjakan (Dua Arah)
+    const handleRevertToDikerjakan = async (item: JadwalRow) => {
+        const supabase = createClient();
+        setJadwals((prev) =>
+            prev.map((j) => (j.id === item.id ? { ...j, status: "dikerjakan" } : j))
+        );
+
+        const { error } = await supabase
+            .from("jadwal_kegiatan")
+            .update({ status: "dikerjakan" })
+            .eq("id", item.id);
+
+        if (error) {
+            alert("Gagal mengubah status: " + error.message);
+            fetchJadwal();
+            return;
+        }
+
+        fetchActiveMonths();
+        fetchCompletedMonths();
+        router.refresh();
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("app:sync"));
+        }
+    };
+
+    // Fetch data jadwal
     const fetchJadwal = useCallback(async () => {
         const supabase = createClient();
         const { data, error } = await supabase
@@ -330,10 +336,9 @@ export default function JadwalTimPage() {
     useEffect(() => {
         fetchJadwal();
 
-        // Realtime subscription ke jadwal_kegiatan
         const supabase = createClient();
         const channel = supabase
-            .channel("realtime-jadwal-single")
+            .channel("realtime-jadwal-section")
             .on("postgres_changes", { event: "*", schema: "public", table: "jadwal_kegiatan" }, () => {
                 fetchJadwal();
                 fetchActiveMonths();
@@ -369,166 +374,77 @@ export default function JadwalTimPage() {
             });
     }, []);
 
-    // Bangun 7 kolom harian
+    // 7 Kolom Harian untuk mode kalender
     const weekDays = useMemo(() => {
         const todayStr = toIsoDate(new Date());
 
         return Array.from({ length: 7 }, (_, i) => {
             const dateObj = addDays(monday, i);
-            const iso = toIsoDate(dateObj);
-            const dayNum = dateObj.getDate();
-            const monthShort = BULAN_NAMES[dateObj.getMonth()].slice(0, 3);
+            const isoString = toIsoDate(dateObj);
 
-            // Cocokkan tanggal (ambil 10 karakter pertama YYYY-MM-DD)
             const dayTasks = jadwals.filter((item) => {
-                const startIso = String(item.tanggal).slice(0, 10);
-                const endIso = item.tanggal_selesai
+                const itemStart = String(item.tanggal).slice(0, 10);
+                const itemEnd = item.tanggal_selesai
                     ? String(item.tanggal_selesai).slice(0, 10)
-                    : startIso;
-                return iso >= startIso && iso <= endIso;
+                    : itemStart;
+                return isoString >= itemStart && isoString <= itemEnd;
             });
 
             return {
-                iso,
                 hari: HARI_NAMES[i],
-                tanggal: dayNum + " " + monthShort,
-                isToday: iso === todayStr,
-                isWeekend: i >= 5,
+                tanggal: dateObj.getDate(),
+                bulanTahun: BULAN_NAMES[dateObj.getMonth()].slice(0, 3) + " " + dateObj.getFullYear(),
+                iso: isoString,
+                isToday: isoString === todayStr,
                 tasks: dayTasks,
             };
         });
     }, [monday, jadwals]);
 
     useEffect(() => {
-        // Cek apakah ada hari di minggu ini yang cocok dengan salah satu bulan beragenda
-        const match = activeMonths.find((m) => {
-            const mKey = m.key;
-            // Cek Senin, Kamis, atau Minggu
-            const monKey = monday.getFullYear() + "-" + monday.getMonth();
-            const sunKey = sunday.getFullYear() + "-" + sunday.getMonth();
-            const ancKey = anchorDate.getFullYear() + "-" + anchorDate.getMonth();
-            return mKey === ancKey || mKey === monKey || mKey === sunKey;
-        });
-
-        if (match) {
-            setSelectedMonthKey(match.key);
-        } else {
-            setSelectedMonthKey("");
-        }
+        if (activeMonths.length === 0) return;
+        const monKey = monday.getFullYear() + "-" + monday.getMonth();
+        const matched = activeMonths.some((m) => m.key === monKey);
+        setSelectedMonthKey(matched ? monKey : "");
     }, [anchorDate, monday, sunday, activeMonths]);
 
-    // Navigasi minggu
     const prevWeek = () => setAnchorDate((prev) => addDays(prev, -7));
     const nextWeek = () => setAnchorDate((prev) => addDays(prev, 7));
 
     const staffList = useMemo(() => {
-        const list = [{ label: "Semua", text: "Semua (" + members.length + ")" }];
-        members.forEach((m) => {
-            // Ambil nama panggilan (kata pertama dari nama lengkap / username email)
-            const rawName = m.full_name || m.email.split("@")[0];
-            const firstName = rawName.split(" ")[0];
-            list.push({
-                label: rawName,
-                text: firstName,
-            });
+        const dynamicList = members.map((m) => {
+            const name = m.full_name || m.email.split("@")[0];
+            return { label: name, text: name };
         });
-        return list;
+        return [{ label: "Semua", text: "Semua Petugas" }, ...dynamicList];
     }, [members]);
 
     const getDotColor = (name: string) => {
         const n = name.toLowerCase();
-        if (n.includes("budi")) return "bg-green-600";
-        if (n.includes("siti")) return "bg-emerald-600";
-        if (n.includes("dimas")) return "bg-amber-700";
+        if (n.includes("tim")) return "bg-indigo-600";
+        if (n.includes("budi")) return "bg-emerald-600";
+        if (n.includes("siti")) return "bg-pink-600";
+        if (n.includes("ahmad")) return "bg-amber-600";
         if (n.includes("rina")) return "bg-blue-600";
         return "bg-slate-400";
     };
 
     return (
-        <main className="max-w-7xl mx-auto space-y-4">
-            {/* Top Bar */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <div className="flex items-center gap-2.5">
-                        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Jadwal Kerja Tim</h1>
-                        <span className="text-[11px] font-medium bg-slate-100 text-['#3B684A'] border border-slate-200 px-2 py-0.5 rounded-full">
-                            Operasional Aktif
-                        </span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                        Koordinasi kegiatan lapangan, panen, perawatan
-                    </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2.5">
-                    <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200 text-xs font-medium">
-                        <button
-                            type="button"
-                            onClick={() => setViewMode("penjadwalan")}
-                            className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition cursor-pointer ${viewMode === "penjadwalan"
-                                ? "bg-white text-gray-900 shadow-2xs font-semibold"
-                                : "text-gray-600 hover:text-gray-900"
-                                }`}
-                        >
-                            <Calendar className="w-3.5 h-3.5" />
-                            <span>Mode Penjadwalan</span>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setViewMode("gantt")}
-                            className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition cursor-pointer ${viewMode === "gantt"
-                                ? "bg-white text-gray-900 shadow-2xs font-semibold"
-                                : "text-gray-600 hover:text-gray-900"
-                                }`}
-                        >
-                            <BarChart3 className="w-3.5 h-3.5" />
-                            <span>Mode Gantt Chart</span>
-                        </button>
-                    </div>
-
-                    {/* Tombol Cetak PDF / Laporan */}
-                    <button
-                        type="button"
-                        onClick={() => window.print()}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold transition shadow-2xs cursor-pointer"
-                        title="Cetak Laporan Resmi atau Ekspor ke PDF"
-                    >
-                        <Printer className="w-3.5 h-3.5 text-gray-600" />
-                        <span>Cetak Laporan</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={() => setIsModalOpen(true)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#17462e] hover:bg-[#123824] text-white rounded-lg text-xs font-medium transition shadow-2xs"
-                    >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Tambah Jadwal</span>
-                    </button>
-                </div>
-            </div>
-
+        <div className="space-y-4">
             {/* Navigasi Tanggal & Filter Petugas */}
-            <div className="flex flex-wrap items-center border border-1 border-gray-200 justify-between gap-3 p-2 rounded-md">
+            <div className="flex flex-wrap items-center border border-gray-200 justify-between gap-3 p-2.5 rounded-xl bg-white shadow-2xs">
                 <div className="flex items-center gap-2 text-xs">
                     <button
                         type="button"
                         onClick={prevWeek}
-                        className="p-1 border border-gray-200 rounded-md hover:bg-gray-50 text-gray-600 transition"
+                        className="p-1 border border-gray-200 rounded-md hover:bg-gray-50 text-gray-600 transition cursor-pointer"
                     >
                         <ChevronLeft className="w-3.5 h-3.5" />
                     </button>
-                    {/* <button
-                        type="button"
-                        onClick={() => setAnchorDate(new Date())}
-                        className="px-2 py-0.5 border border-gray-200 rounded-md hover:bg-gray-50 text-[11px] font-medium text-gray-700 transition"
-                    >
-                        Hari Ini
-                    </button> */}
                     <button
                         type="button"
                         onClick={nextWeek}
-                        className="p-1 border border-gray-200 rounded-md hover:bg-gray-50 text-gray-600 transition"
+                        className="p-1 border border-gray-200 rounded-md hover:bg-gray-50 text-gray-600 transition cursor-pointer"
                     >
                         <ChevronRight className="w-3.5 h-3.5" />
                     </button>
@@ -541,14 +457,14 @@ export default function JadwalTimPage() {
                     </span>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-xs">
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
                     <span className="text-gray-500 mr-1 text-[11px]">Petugas:</span>
                     {staffList.map((st) => (
                         <button
                             key={st.label}
                             type="button"
                             onClick={() => setSelectedStaff(st.label)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${selectedStaff === st.label
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${selectedStaff === st.label
                                 ? "bg-slate-900 text-white"
                                 : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
                                 }`}
@@ -559,9 +475,9 @@ export default function JadwalTimPage() {
                 </div>
             </div>
 
-            {/* Filter Status & Dua Dropdown Bulan: Beragenda vs Telah Dilaksanakan */}
+            {/* Filter Status & Dua Dropdown Bulan */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                {/* Selektor Tampilan Cepat (Tab) */}
+                {/* Tab Filter Status */}
                 <div className="flex items-center gap-2">
                     <span className="text-[11px] font-medium text-gray-500">Tampilkan:</span>
                     <div className="flex items-center border border-gray-200 rounded-lg bg-gray-100 p-0.5 text-xs">
@@ -569,7 +485,7 @@ export default function JadwalTimPage() {
                             type="button"
                             onClick={() => setFilterStatus("terjadwal")}
                             className={
-                                "px-2.5 py-1 rounded-md font-medium transition " +
+                                "px-2.5 py-1 rounded-md font-medium transition cursor-pointer " +
                                 (filterStatus === "terjadwal"
                                     ? "bg-white font-semibold text-gray-900 shadow-2xs"
                                     : "text-gray-600 hover:text-gray-900")
@@ -581,7 +497,7 @@ export default function JadwalTimPage() {
                             type="button"
                             onClick={() => setFilterStatus("selesai")}
                             className={
-                                "px-2.5 py-1 rounded-md font-medium transition " +
+                                "px-2.5 py-1 rounded-md font-medium transition cursor-pointer " +
                                 (filterStatus === "selesai"
                                     ? "bg-white font-semibold text-gray-900 shadow-2xs"
                                     : "text-gray-600 hover:text-gray-900")
@@ -593,7 +509,7 @@ export default function JadwalTimPage() {
                             type="button"
                             onClick={() => setFilterStatus("semua")}
                             className={
-                                "px-2.5 py-1 rounded-md font-medium transition " +
+                                "px-2.5 py-1 rounded-md font-medium transition cursor-pointer " +
                                 (filterStatus === "semua"
                                     ? "bg-white font-semibold text-gray-900 shadow-2xs"
                                     : "text-gray-600 hover:text-gray-900")
@@ -604,9 +520,8 @@ export default function JadwalTimPage() {
                     </div>
                 </div>
 
-                {/* Sisi Kanan: Dua Dropdown Berdampingan */}
+                {/* Dropdown Bulan */}
                 <div className="flex flex-wrap items-center gap-3">
-                    {/* 1. Dropdown Bulan Beragenda (Aktif / Belum Selesai) */}
                     <div className="flex items-center gap-1.5 text-xs text-gray-500">
                         <span className="text-[11px] font-medium text-gray-600">Bulan Beragenda:</span>
                         <select
@@ -615,7 +530,7 @@ export default function JadwalTimPage() {
                                 const val = e.target.value;
                                 setSelectedMonthKey(val);
                                 if (val) {
-                                    setSelectedCompletedMonthKey(""); // Reset dropdown sebelah
+                                    setSelectedCompletedMonthKey("");
                                     const target = activeMonths.find((m) => m.key === val);
                                     if (target) {
                                         setAnchorDate(new Date(target.date.getTime()));
@@ -633,7 +548,6 @@ export default function JadwalTimPage() {
                         </select>
                     </div>
 
-                    {/* 2. Dropdown Telah Dilaksanakan (Selesai) */}
                     <div className="flex items-center gap-1.5 text-xs text-gray-500">
                         <span className="text-[11px] font-medium text-gray-600">Telah Dilaksanakan:</span>
                         <select
@@ -642,7 +556,7 @@ export default function JadwalTimPage() {
                                 const val = e.target.value;
                                 setSelectedCompletedMonthKey(val);
                                 if (val) {
-                                    setSelectedMonthKey("");       // Reset dropdown sebelah
+                                    setSelectedMonthKey("");
                                     const target = completedMonths.find((m) => m.key === val);
                                     if (target) {
                                         setAnchorDate(new Date(target.date.getTime()));
@@ -662,7 +576,7 @@ export default function JadwalTimPage() {
                 </div>
             </div>
 
-            {/* Tampilan Kalender Mingguan ATAU Gantt Chart */}
+            {/* Konten: Kalender 7 Kolom ATAU Gantt Chart */}
             {viewMode === "gantt" ? (
                 <GanttChartTim
                     weekDays={weekDays}
@@ -670,10 +584,7 @@ export default function JadwalTimPage() {
                     filterStatus={filterStatus}
                     selectedStaff={selectedStaff}
                     anchorDate={anchorDate}
-                    onSelectTask={(task) => {
-                        setSelectedJadwalToEdit(task);
-                        setIsEditModalOpen(true);
-                    }}
+                    onSelectTask={onSelectTask}
                     getDotColor={getDotColor}
                     realCurrentYear={realCurrentYear}
                     realCurrentMonth={realCurrentMonth}
@@ -684,7 +595,6 @@ export default function JadwalTimPage() {
                     <div className="overflow-x-auto">
                         <div className="grid grid-cols-7 min-w-[960px] divide-x divide-gray-200">
                             {weekDays.map((day) => {
-                                // Cek apakah tanggal ini berada di bulan sebelum bulan real saat ini
                                 const [dayY, dayM] = day.iso.split("-").map(Number);
                                 const isPastMonth =
                                     dayY < realCurrentYear ||
@@ -735,25 +645,22 @@ export default function JadwalTimPage() {
                                                 </span>
                                             </div>
 
-                                            {isPastMonth && (
-                                                <span className="text-[9px] font-medium text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded">
-                                                    Lewat
-                                                </span>
-                                            )}
-
-                                            {!isPastMonth && day.isToday && displayedTasks.length > 0 && (
-                                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                                                    Hari ini
+                                            {day.isToday && (
+                                                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-[#17462e] text-white rounded">
+                                                    HARI INI
                                                 </span>
                                             )}
                                         </div>
 
-                                        {/* Isi Kartu */}
-                                        <div className="p-2.5 space-y-2.5 flex-1">
+                                        {/* List Kartu Tugas */}
+                                        <div className="p-2 flex-1 flex flex-col gap-2">
                                             {loading ? (
-                                                <div className="flex justify-center items-center py-8 text-gray-400">
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                <div className="py-8 flex justify-center">
+                                                    <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                                                </div>
+                                            ) : displayedTasks.length === 0 ? (
+                                                <div className="flex-1 flex flex-col items-center justify-center p-3 text-center border border-dashed border-gray-200 rounded-lg text-gray-400 text-xs mt-2">
+                                                    <span>Tidak ada agenda</span>
                                                 </div>
                                             ) : (
                                                 <>
@@ -767,26 +674,19 @@ export default function JadwalTimPage() {
                                                             <div
                                                                 key={t.id}
                                                                 draggable={true}
-                                                                onClick={() => {
-                                                                    setSelectedJadwalToEdit(t);
-                                                                    setIsEditModalOpen(true);
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    onSelectTask(t);
                                                                 }}
                                                                 onDoubleClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    if (isSelesai) {
-                                                                        if (confirm("Hapus agenda \"" + t.nama_kegiatan + "\"?")) {
-                                                                            handleDeleteJadwal(t.id, t.nama_kegiatan);
+                                                                    if (!isSelesai) {
+                                                                        if (confirm("Tandai agenda \"" + t.nama_kegiatan + "\" sebagai Selesai?")) {
+                                                                            handleCompleteJadwal(t);
                                                                         }
                                                                     } else {
-                                                                        const aksi = confirm(
-                                                                            "Klik OK untuk TANDAI SELESAI (Masuk Catatan),\natau Batal jika ingin Hapus."
-                                                                        );
-                                                                        if (aksi) {
-                                                                            handleCompleteJadwal(t);
-                                                                        } else {
-                                                                            if (confirm("Hapus agenda ini secara permanen?")) {
-                                                                                handleDeleteJadwal(t.id, t.nama_kegiatan);
-                                                                            }
+                                                                        if (confirm("Hapus agenda ini secara permanen?")) {
+                                                                            handleDeleteJadwal(t.id, t.nama_kegiatan);
                                                                         }
                                                                     }
                                                                 }}
@@ -801,46 +701,19 @@ export default function JadwalTimPage() {
                                                                     setDraggedItem(null);
                                                                     setIsOverTrash(false);
                                                                     setIsOverDone(false);
+                                                                    setIsOverUpdate(false);
+                                                                    setIsOverDoneUpdate(false);
+                                                                    setIsOverRevert(false);
                                                                 }}
                                                                 className={
-                                                                    "group relative border rounded-lg p-2.5 shadow-2xs space-y-2 transition cursor-pointer select-none " +
-                                                                    (draggedItem?.id === t.id
-                                                                        ? "opacity-30 border-dashed border-emerald-400 scale-95"
-                                                                        : isSelesai
-                                                                            ? "bg-emerald-50/40 border-emerald-300 hover:border-emerald-400"
+                                                                    "group relative p-2.5 rounded-lg border text-xs shadow-2xs transition-all select-none cursor-grab active:cursor-grabbing " +
+                                                                    (isSelesai
+                                                                        ? "bg-emerald-50/70 border-emerald-300"
+                                                                        : isPanen
+                                                                            ? "bg-green-50/80 border-green-200 hover:border-green-300"
                                                                             : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-xs")
                                                                 }
                                                             >
-                                                                {/* Tombol Aksi Cepat saat Hover: Selesai & Hapus */}
-                                                                <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition z-10">
-                                                                    {!isSelesai && (
-                                                                        <button
-                                                                            type="button"
-                                                                            title="Tandai Selesai (Masuk Catatan)"
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                handleCompleteJadwal(t);
-                                                                            }}
-                                                                            className="p-1 text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 rounded border border-emerald-200 transition"
-                                                                        >
-                                                                            <CheckCircle2 className="w-3.5 h-3.5" />
-                                                                        </button>
-                                                                    )}
-                                                                    <button
-                                                                        type="button"
-                                                                        title="Hapus jadwal"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            if (confirm("Hapus jadwal \"" + t.nama_kegiatan + "\"?")) {
-                                                                                handleDeleteJadwal(t.id, t.nama_kegiatan);
-                                                                            }
-                                                                        }}
-                                                                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 bg-white rounded border border-gray-200 transition"
-                                                                    >
-                                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                                    </button>
-                                                                </div>
-
                                                                 <div className="flex items-center justify-between gap-1">
                                                                     <span className="text-[10px] font-medium text-gray-500">
                                                                         {formatTime(t.waktu_mulai)} - {formatTime(t.waktu_selesai)}
@@ -873,50 +746,46 @@ export default function JadwalTimPage() {
                                                                     )}
                                                                 </div>
 
-                                                                <h2
-                                                                    className={`text-xs font-semibold leading-snug ${isSelesai ? "text-emerald-950 line-through decoration-emerald-600/60" : "text-gray-900"
-                                                                        }`}
+                                                                <h4
+                                                                    className={
+                                                                        "font-semibold mt-1 leading-snug " +
+                                                                        (isSelesai
+                                                                            ? "text-emerald-950 line-through opacity-80"
+                                                                            : "text-gray-900 group-hover:text-green-800")
+                                                                    }
                                                                 >
                                                                     {t.nama_kegiatan}
-                                                                </h2>
+                                                                </h4>
 
-                                                                <div className="space-y-1 pt-1 border-t border-gray-100 text-[11px] text-gray-600">
+                                                                {t.catatan && (
+                                                                    <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">
+                                                                        {t.catatan}
+                                                                    </p>
+                                                                )}
+
+                                                                <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500">
                                                                     <div className="flex items-center gap-1.5">
                                                                         <span
                                                                             className={
-                                                                                "w-1.5 h-1.5 rounded-full shrink-0 " +
+                                                                                "w-1.5 h-1.5 rounded-full " +
                                                                                 getDotColor(t.penanggung_jawab_nama)
                                                                             }
                                                                         />
-                                                                        <span className="truncate">{t.penanggung_jawab_nama}</span>
+                                                                        <span className="truncate max-w-[80px]">
+                                                                            {t.penanggung_jawab_nama}
+                                                                        </span>
                                                                     </div>
+
                                                                     {t.lokasi && (
-                                                                        <div className="flex items-center gap-1.5 text-gray-400">
-                                                                            <MapPin className="w-3 h-3 shrink-0" />
-                                                                            <span className="truncate text-[10px] text-gray-500">
-                                                                                {t.lokasi}
-                                                                            </span>
-                                                                        </div>
+                                                                        <span className="text-gray-400 flex items-center gap-0.5 truncate max-w-[70px]">
+                                                                            <MapPin className="w-3 h-3 text-gray-400 shrink-0" />
+                                                                            <span className="truncate">{t.lokasi}</span>
+                                                                        </span>
                                                                     )}
                                                                 </div>
                                                             </div>
                                                         );
                                                     })}
-
-                                                    {/* Placeholder Kosong */}
-                                                    {displayedTasks.length === 0 && (
-                                                        <div className="h-full min-h-[140px] border border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center p-3 text-center">
-                                                            {isPastMonth ? (
-                                                                <span className="text-xs font-medium text-gray-400">
-                                                                    Bulan lampau
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-xs font-medium text-gray-500">
-                                                                    Tidak ada agenda
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    )}
                                                 </>
                                             )}
                                         </div>
@@ -928,52 +797,6 @@ export default function JadwalTimPage() {
                 </div>
             )}
 
-            {/* Footer Penanggung Jawab */}
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500 pt-1 px-1">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                    <span className="text-[11px] font-medium text-gray-700">Penanggung Jawab:</span>
-                    {members.map((m) => {
-                        const name = m.full_name || m.email.split("@")[0];
-                        return (
-                            <div key={m.id} className="flex items-center gap-1.5">
-                                <span className={"w-2 h-2 rounded-full " + getDotColor(name)}></span>
-                                <span className="text-[11px]">{name}</span>
-                            </div>
-                        );
-                    })}
-                </div>
-
-                <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span>Zona Waktu: WIB (GMT+7)</span>
-                </div>
-            </div>
-
-            {/* Modal Tambah Jadwal */}
-            <ModalTambahJadwal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                onSuccess={(newDate) => {
-                    if (newDate) setAnchorDate(new Date(newDate));
-                    fetchJadwal();
-                    fetchActiveMonths();
-                }}
-            />
-
-            {/* Modal Edit Jadwal */}
-            <ModalEditJadwal
-                isOpen={isEditModalOpen}
-                jadwal={selectedJadwalToEdit}
-                onClose={() => {
-                    setIsEditModalOpen(false);
-                    setSelectedJadwalToEdit(null);
-                }}
-                onSuccess={() => {
-                    fetchJadwal();
-                    fetchActiveMonths();
-                }}
-            />
-
             {/* Drop Zones saat Kartu Di-drag */}
             <div
                 className={`fixed bottom-6 inset-x-0 mx-auto max-w-3xl z-50 flex items-center justify-center gap-2.5 px-4 transition-all duration-300 ${draggedItem
@@ -981,8 +804,39 @@ export default function JadwalTimPage() {
                     : "opacity-0 translate-y-12 pointer-events-none"
                     }`}
             >
-                {/* 1. Kondisi Normal (tidak perlu update): Hanya tampilkan Selesai (Done) */}
-                {draggedItem?.status !== "perlu_update" && (
+                {/* 1. Kondisi Selesai: Drop zone Kembalikan ke Dikerjakan (Dua Arah) */}
+                {draggedItem?.status === "selesai" && (
+                    <div
+                        onDragOver={(e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = "move";
+                            setIsOverRevert(true);
+                        }}
+                        onDragLeave={() => setIsOverRevert(false)}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            if (draggedItem) {
+                                handleRevertToDikerjakan(draggedItem);
+                            }
+                            draggedIdRef.current = null;
+                            setDraggedItem(null);
+                            setIsOverRevert(false);
+                        }}
+                        className={`flex-1 flex items-center justify-center gap-2.5 py-3.5 px-5 rounded-2xl border-2 transition-all duration-200 shadow-xl cursor-copy ${isOverRevert
+                            ? "bg-amber-500 border-amber-600 text-white scale-105 ring-4 ring-amber-200"
+                            : "bg-white border-amber-500 text-amber-700 hover:bg-amber-50/50"
+                            }`}
+                    >
+                        <RefreshCw className={"w-5 h-5 shrink-0 " + (isOverRevert ? "animate-spin" : "")} />
+                        <div className="text-left">
+                            <div className="text-xs font-bold leading-tight">Kembalikan ke Dikerjakan</div>
+                            <div className="text-[10px] opacity-80 leading-tight">Buka kembali status agenda</div>
+                        </div>
+                    </div>
+                )}
+
+                {/* 2. Kondisi Normal (belum selesai & tidak perlu update): Selesai (Done) */}
+                {draggedItem?.status !== "selesai" && draggedItem?.status !== "perlu_update" && (
                     <div
                         onDragOver={(e) => {
                             e.preventDefault();
@@ -1012,10 +866,9 @@ export default function JadwalTimPage() {
                     </div>
                 )}
 
-                {/* 2. Kondisi Perlu Update: Hanya tampilkan Update Catatan & Done + Update */}
+                {/* 3. Kondisi Perlu Update: Update Catatan & Done + Update */}
                 {draggedItem?.status === "perlu_update" && (
                     <>
-                        {/* Zona Update Saja (Belum Selesai) */}
                         <div
                             onDragOver={(e) => {
                                 e.preventDefault();
@@ -1044,7 +897,6 @@ export default function JadwalTimPage() {
                             </div>
                         </div>
 
-                        {/* Zona Done + Update (Selesai & Update) */}
                         <div
                             onDragOver={(e) => {
                                 e.preventDefault();
@@ -1075,7 +927,7 @@ export default function JadwalTimPage() {
                     </>
                 )}
 
-                {/* 3. Zona Hapus / Trash (Merah) - Selalu Tampil */}
+                {/* 3. Zona Hapus (Merah) */}
                 <div
                     onDragOver={(e) => {
                         e.preventDefault();
@@ -1111,10 +963,8 @@ export default function JadwalTimPage() {
                     day: "numeric",
                     month: "long",
                     year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
                 })}
             />
-        </main>
+        </div>
     );
 }

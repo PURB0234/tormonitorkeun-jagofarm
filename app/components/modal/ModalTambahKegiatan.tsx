@@ -1,11 +1,19 @@
-// 1. app/components/modal/ModalTambahCatatan.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import {
-    X, FileText, MapPin, UploadCloud,
-    Image as ImageIcon, FileSpreadsheet, Link2, BookmarkCheck, ChevronDown,
-    Calendar, Check
+    X,
+    FileText,
+    Calendar,
+    MapPin,
+    Clock,
+    UploadCloud,
+    Image as ImageIcon,
+    Link2,
+    BookmarkCheck,
+    ChevronDown,
+    Check,
+    Loader2,
 } from "lucide-react";
 import { createClient } from "@/app/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -14,28 +22,42 @@ import { DAFTAR_LOKASI } from "@/app/lib/constants";
 type ModalProps = {
     isOpen: boolean;
     onClose: () => void;
+    onSuccess?: (targetDate?: string) => void;
 };
 
-export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
-    const [status, setStatus] = useState<"dikerjakan" | "selesai">("dikerjakan");
+export default function ModalTambahKegiatan({ isOpen, onClose, onSuccess }: ModalProps) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
-    const [userName, setUserName] = useState("");
-    const [members, setMembers] = useState<any[]>([]);
-    const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
-    const [isAllTeam, setIsAllTeam] = useState(false);
+
+    // Form States
+    const [namaKegiatan, setNamaKegiatan] = useState("");
+    const [status, setStatus] = useState<"terjadwal" | "selesai">("terjadwal");
     const [tanggal, setTanggal] = useState(new Date().toISOString().split("T")[0]);
     const [tanggalSelesai, setTanggalSelesai] = useState(new Date().toISOString().split("T")[0]);
     const [waktuMulai, setWaktuMulai] = useState("08:00");
     const [waktuSelesai, setWaktuSelesai] = useState("10:00");
-    const [myEmail, setMyEmail] = useState("");
+    const [lokasi, setLokasi] = useState("Ko+Lab");
+    const [deskripsi, setDeskripsi] = useState("");
+    const [tautan, setTautan] = useState("");
     const [file, setFile] = useState<File | null>(null);
 
+    // Member & Auth States
+    const [members, setMembers] = useState<{ id: string; full_name?: string; name?: string; email: string }[]>([]);
+    const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+    const [isAllTeam, setIsAllTeam] = useState(false);
+    const [myEmail, setMyEmail] = useState("");
+    const [userName, setUserName] = useState("Staf Lapangan");
+
+    // Batas minimum tanggal: awal bulan saat ini
+    const now = new Date();
+    const minMonthStart = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-01";
+
     const toggleMember = (id: string) => {
-        setIsAllTeam(false);
-        setSelectedMemberIds((prev) =>
-            prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-        );
+        setSelectedMemberIds((prev) => {
+            const next = prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id];
+            setIsAllTeam(members.length > 0 && next.length === members.length);
+            return next;
+        });
     };
 
     const toggleAllTeam = () => {
@@ -73,22 +95,25 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
             });
     }, [isOpen, myEmail]);
 
+    if (!isOpen) return null;
+
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setLoading(true);
 
-        const formData = new FormData(e.currentTarget);
         const supabase = createClient();
 
+        // 1. Upload Berkas ke Storage jika ada
         let lampiranUrl: string | null = null;
         let lampiranNama: string | null = null;
 
         if (file) {
             const ext = file.name.split(".").pop();
-            const filePath = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+            const filePath = `kegiatan_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
 
             const { error: uploadError } = await supabase.storage
-                .from("berkas_catatan").upload(filePath, file);
+                .from("berkas_catatan")
+                .upload(filePath, file);
 
             if (uploadError) {
                 alert("Gagal mengunggah lampiran: " + uploadError.message);
@@ -103,6 +128,7 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
             lampiranNama = file.name;
         }
 
+        // 2. Format Penanggung Jawab
         let pjNama = "";
         let finalTag: string | null = null;
 
@@ -119,85 +145,94 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                 });
             pjNama = selectedNames.join(" & ");
         } else {
-            pjNama = userName || "Staf Lapangan";
+            pjNama = userName;
         }
 
         const isValidUUID = (id: string | null) =>
             id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
         const primaryId = selectedMemberIds.length === 1 ? selectedMemberIds[0] : null;
 
-        // Simpan langsung ke jadwal_kegiatan (Single Source of Truth)
-        const userTautan = (formData.get("tautan") as string) || null;
-
-        const { error } = await supabase
-            .from("jadwal_kegiatan")
-            .insert({
-                nama_kegiatan: formData.get("judul") as string,
-                penanggung_jawab_id: isValidUUID(primaryId) ? primaryId : null,
-                penanggung_jawab_nama: pjNama,
-                tanggal: tanggal,
-                tanggal_selesai: tanggalSelesai || tanggal,
-                waktu_mulai: waktuMulai,
-                waktu_selesai: waktuSelesai,
-                lokasi: (formData.get("lokasi") as string) || "Ko+Lab",
-                catatan: (formData.get("deskripsi") as string) || null,
-                tag: finalTag,
-                status: status === "selesai" ? "selesai" : "terjadwal",
-                lampiran_url: lampiranUrl,
-                lampiran_nama: lampiranNama,
-                tautan_eksternal: userTautan,
-            });
+        // 3. Simpan ke Single Source of Truth: jadwal_kegiatan
+        const { error } = await supabase.from("jadwal_kegiatan").insert({
+            nama_kegiatan: namaKegiatan,
+            penanggung_jawab_id: isValidUUID(primaryId) ? primaryId : null,
+            penanggung_jawab_nama: pjNama,
+            tanggal: tanggal,
+            tanggal_selesai: tanggalSelesai || tanggal,
+            waktu_mulai: waktuMulai,
+            waktu_selesai: waktuSelesai,
+            lokasi: lokasi || "Ko+Lab",
+            catatan: deskripsi || null,
+            tag: finalTag,
+            status: status === "selesai" ? "selesai" : "terjadwal",
+            lampiran_url: lampiranUrl,
+            lampiran_nama: lampiranNama,
+            tautan_eksternal: tautan || null,
+        });
 
         setLoading(false);
+
         if (error) {
             alert("Gagal menyimpan: " + error.message);
-        } else {
-            if (typeof window !== "undefined") {
-                window.dispatchEvent(new CustomEvent("app:sync"));
-            }
-            onClose();
-            router.refresh();
+            return;
         }
-    };
 
-    if (!isOpen) return null;
+        // Reset Form
+        setNamaKegiatan("");
+        setDeskripsi("");
+        setTautan("");
+        setFile(null);
+
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("app:sync"));
+        }
+        if (onSuccess) onSuccess(tanggal);
+        onClose();
+        router.refresh();
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-2xs">
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
                 {/* Header Modal */}
-                <header className="flex items-start justify-between p-6 border-b border-gray-100">
+                <header className="flex items-start justify-between p-5 border-b border-gray-100 bg-slate-50/50">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-[#1E5E35] text-white flex items-center justify-center">
+                        <div className="w-10 h-10 rounded-xl bg-[#1E5E35] text-white flex items-center justify-center shrink-0">
                             <FileText className="w-5 h-5" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-bold text-gray-900">Tambah Catatan Pekerjaan</h2>
-                            <p className="text-xs text-gray-500 mt-0.5">Dokumentasikan progres harian, temuan lapangan, atau bukti pekerjaan tim.</p>
+                            <h2 className="text-base font-bold text-gray-900">Tambah Catatan & Kegiatan Baru</h2>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                                Terhubung langsung ke Log Catatan, Kalender Jadwal, dan Timeline Gantt Chart.
+                            </p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
+                    <button
+                        onClick={onClose}
+                        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                    >
                         <X className="w-5 h-5" />
                     </button>
                 </header>
 
                 {/* Form Isi (Scrollable) */}
-                <form id="form-catatan" onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
-                    {/* Judul */}
+                <form id="form-tambah-kegiatan" onSubmit={handleSubmit} className="p-5 overflow-y-auto space-y-4 text-xs">
+                    {/* Judul Kegiatan */}
                     <div>
                         <label className="block font-bold text-gray-800 mb-1.5">
-                            Judul Catatan Pekerjaan <span className="text-red-500">*</span>
+                            Judul / Nama Kegiatan <span className="text-red-500">*</span>
                         </label>
                         <input
                             type="text"
                             required
-                            name="judul"
-                            placeholder="cth: Kalibrasi Sensor EC Greenhouse 02"
+                            value={namaKegiatan}
+                            onChange={(e) => setNamaKegiatan(e.target.value)}
+                            placeholder="Contoh: Kalibrasi Sensor EC Greenhouse 02 & Cek Pompa Nutrisi"
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600"
                         />
                     </div>
 
-                    {/* Penanggung Jawab (Bisa Lebih dari 1 PJ) */}
+                    {/* Penanggung Jawab (Multi-PJ) */}
                     <div>
                         <div className="flex items-center justify-between mb-1.5">
                             <label className="font-bold text-gray-800">
@@ -209,12 +244,11 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                         </div>
 
                         <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 border border-gray-200 rounded-lg">
-                            {/* Tombol Seluruh Tim */}
                             <button
                                 type="button"
                                 onClick={toggleAllTeam}
                                 className={
-                                    "px-2.5 py-1 rounded-md text-xs font-medium transition " +
+                                    "px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer " +
                                     (isAllTeam
                                         ? "bg-[#1E5E35] text-white"
                                         : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100")
@@ -223,7 +257,6 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                                 Seluruh Tim
                             </button>
 
-                            {/* Daftar Petugas */}
                             {members.map((m) => {
                                 const isSelected = selectedMemberIds.includes(m.id);
                                 const name = m.name || m.full_name || m.email?.split("@")[0] || "Anggota";
@@ -233,7 +266,7 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                                         type="button"
                                         onClick={() => toggleMember(m.id)}
                                         className={
-                                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition " +
+                                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer " +
                                             (isSelected
                                                 ? "bg-[#1E5E35] text-white"
                                                 : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100")
@@ -258,6 +291,7 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                                 <input
                                     type="date"
                                     required
+                                    min={minMonthStart}
                                     value={tanggal}
                                     onChange={(e) => {
                                         const val = e.target.value;
@@ -287,7 +321,7 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                         </div>
                     </div>
 
-                    {/* Waktu Pelaksanaan & Status */}
+                    {/* Waktu Pelaksanaan & Lokasi */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label className="block font-bold text-gray-800 mb-1.5">
@@ -312,95 +346,70 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                             </div>
                         </div>
 
+                        {/* Lokasi */}
                         <div>
                             <label className="block font-bold text-gray-800 mb-1.5">
-                                Status Pekerjaan <span className="text-red-500">*</span>
+                                Lokasi / Fasilitas Operasional <span className="text-red-500">*</span>
                             </label>
-                            <div className="grid grid-cols-2 gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setStatus("dikerjakan")}
-                                    className={`py-2 px-3 rounded-lg border font-semibold flex items-center justify-center gap-1.5 transition-colors ${status === "dikerjakan"
-                                        ? "border-green-600 bg-green-50 text-green-800"
-                                        : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                                        }`}
+                            <div className="relative">
+                                <MapPin className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                <select
+                                    value={lokasi}
+                                    onChange={(e) => setLokasi(e.target.value)}
+                                    required
+                                    className="w-full appearance-none pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-xs bg-white text-gray-900 outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600 cursor-pointer"
                                 >
-                                    <span className="w-2 h-2 rounded-full bg-green-600"></span> Dikerjakan
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setStatus("selesai")}
-                                    className={`py-2 px-3 rounded-lg border font-semibold flex items-center justify-center gap-1.5 transition-colors ${status === "selesai"
-                                        ? "border-green-600 bg-green-50 text-green-800"
-                                        : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                                        }`}
-                                >
-                                    <span className="w-2 h-2 rounded-full bg-gray-400"></span> Selesai
-                                </button>
+                                    {DAFTAR_LOKASI.map((loc) => (
+                                        <option key={loc} value={loc}>
+                                            {loc}
+                                        </option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                             </div>
                         </div>
                     </div>
 
-                    {/* Lokasi */}
+                    {/* Deskripsi & Log Detail */}
                     <div>
                         <label className="block font-bold text-gray-800 mb-1.5">
-                            Lokasi / Fasilitas Operasional <span className="text-red-500">*</span>
-                        </label>
-                        <div className="relative">
-                            <MapPin className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                            <select
-                                name="lokasi"
-                                required
-                                className="w-full appearance-none pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-xs bg-white text-gray-900 outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600 cursor-pointer"
-                            >
-                                {DAFTAR_LOKASI.map((loc) => (
-                                    <option key={loc} value={loc}>
-                                        {loc}
-                                    </option>
-                                ))}
-                            </select>
-                            <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
-                    </div>
-
-                    {/* Deskripsi */}
-                    <div>
-                        <label className="block font-bold text-gray-800 mb-1.5">
-                            Deskripsi & Log Detail Pekerjaan <span className="text-red-500">*</span>
+                            Deskripsi / Log Detail Pekerjaan <span className="text-red-500">*</span>
                         </label>
                         <textarea
                             rows={3}
                             required
-                            name="deskripsi"
-                            placeholder="Tuliskan pengamatan teknis, tindakan pemeliharaan yang dilakukan, kendala yang dihadapi, atau rekomendasi tindak lanjut..."
+                            value={deskripsi}
+                            onChange={(e) => setDeskripsi(e.target.value)}
+                            placeholder="Tuliskan catatan teknis lapangan, hasil inspeksi, penanganan nutrisi, atau arahan tugas..."
                             className="w-full p-3 border border-gray-300 rounded-lg text-xs outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600"
                         />
                     </div>
 
-                    {/* Upload Berkas */}
+                    {/* Upload Bukti / Lampiran */}
                     <div>
                         <div className="flex items-center justify-between mb-1.5">
                             <label className="font-bold text-gray-800">
-                                Upload Bukti & Berkas Lapangan <span className="text-gray-400 font-normal">(Opsional)</span>
+                                Upload Bukti & Lampiran <span className="text-gray-400 font-normal">(Opsional)</span>
                             </label>
                             <span className="text-[11px] text-gray-400 font-mono">Maks. 25MB</span>
                         </div>
                         <input
                             type="file"
-                            id="file-bukti"
+                            id="file-tambah-kegiatan"
                             className="hidden"
+                            accept="image/*,.pdf,.csv"
                             onChange={(e) => setFile(e.target.files?.[0] || null)}
                         />
                         {!file ? (
                             <label
-                                htmlFor="file-bukti"
-                                className="border-2 border-dashed border-gray-300 rounded-xl p-5 text-center bg-gray-50/50 hover:bg-gray-50 cursor-pointer transition-colors block"
+                                htmlFor="file-tambah-kegiatan"
+                                className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center bg-gray-50/50 hover:bg-gray-50 cursor-pointer transition-colors block"
                             >
-                                <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-1.5">
-                                    <UploadCloud className="w-5 h-5" />
+                                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-1">
+                                    <UploadCloud className="w-4 h-4" />
                                 </div>
-                                <p className="font-semibold text-gray-800">Klik untuk memilih berkas bukti pekerjaan</p>
-                                <p className="text-[11px] text-gray-400 mt-0.5">Format JPG, PNG, PDF, atau CSV</p>
+                                <p className="font-semibold text-gray-800 text-xs">Pilih berkas foto atau dokumen bukti</p>
+                                <p className="text-[10px] text-gray-400 mt-0.5">Format JPG, PNG, PDF, atau CSV</p>
                             </label>
                         ) : (
                             <div className="flex items-center justify-between p-3 bg-blue-50/40 border border-blue-200 rounded-xl">
@@ -422,14 +431,15 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                         )}
                     </div>
 
-                    {/* Tautan Grafana */}
+                    {/* Tautan Eksternal */}
                     <div>
-                        <label className="block font-bold text-gray-800 mb-1.5">Tautan (Opsional)</label>
+                        <label className="block font-bold text-gray-800 mb-1.5">Tautan Eksternal / Grafana (Opsional)</label>
                         <div className="relative">
                             <Link2 className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                             <input
                                 type="url"
-                                name="tautan"
+                                value={tautan}
+                                onChange={(e) => setTautan(e.target.value)}
                                 placeholder="cth: https://grafana.jagofarm.id/d/gh02-telemetry"
                                 className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-xs outline-hidden focus:border-green-600"
                             />
@@ -442,17 +452,18 @@ export default function ModalTambahCatatan({ isOpen, onClose }: ModalProps) {
                     <button
                         type="button"
                         onClick={onClose}
-                        className="px-4 py-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-semibold rounded-lg text-xs"
+                        className="px-4 py-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-semibold rounded-lg text-xs transition"
                     >
                         Batal
                     </button>
                     <button
-                        form="form-catatan"
+                        form="form-tambah-kegiatan"
                         disabled={loading}
                         type="submit"
-                        className="px-4 py-2 bg-[#1E5E35] hover:bg-green-800 text-white font-semibold rounded-lg text-xs flex items-center gap-2 shadow-2xs"
+                        className="px-4 py-2 bg-[#1E5E35] hover:bg-green-800 text-white font-semibold rounded-lg text-xs flex items-center gap-2 shadow-2xs transition disabled:opacity-50"
                     >
-                        <BookmarkCheck className="w-4 h-4" />{loading ? "Menyimpan..." : "Simpan & Publikasikan Catatan"}
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookmarkCheck className="w-4 h-4" />}
+                        <span>{loading ? "Menyimpan..." : "Simpan & Publikasikan"}</span>
                     </button>
                 </footer>
             </div>

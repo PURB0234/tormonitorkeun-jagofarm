@@ -17,9 +17,9 @@ interface OnlineUser {
     avatar?: string;
 }
 
-const ModalTambahCatatan = dynamic(
+const ModalTambahKegiatan = dynamic(
     () =>
-        import("../modal/ModalTambahCatatan"),
+        import("../modal/ModalTambahKegiatan"),
     { ssr: false }
 );
 
@@ -33,7 +33,6 @@ export default function TopBar({ role }: { role?: UserRole }) {
     const navigation = [
         { label: "Beranda", href: "/beranda" },
         { label: "Catatan Pekerjaan", href: "/catatan-pekerjaan" },
-        { label: "Jadwal Tim", href: "/jadwal-tim" },
         ...(role === "admin" ? [{ label: "Admin Panel", href: "/admin" }] : []),
     ];
 
@@ -220,7 +219,7 @@ export default function TopBar({ role }: { role?: UserRole }) {
                 <LogoutButton />
             </div>
             {isModalOpen && (
-                <ModalTambahCatatan
+                <ModalTambahKegiatan
                     isOpen={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
                 />
