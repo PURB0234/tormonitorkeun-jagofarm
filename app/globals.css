@@ -361,3 +361,36 @@ a {
     padding: 20px 14px;
   }
 }
+
+@media print {
+  @page {
+    size: landscape;
+    margin: 8mm;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11px !important;
+  }
+
+  header,
+  nav,
+  .no-print,
+  .app-shell > header,
+  .sidebar,
+  button,
+  .topbar {
+    display: none !important;
+  }
+
+  .main-content {
+    padding: 0 !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+  }
+
+  .app-shell {
+    min-height: auto !important;
+  }
+}

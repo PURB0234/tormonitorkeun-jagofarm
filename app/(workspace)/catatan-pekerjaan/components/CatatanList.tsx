@@ -16,6 +16,10 @@ export type Catatan = {
     tautan_eksternal?: string | null;
     lampiran_url?: string | null;
     lampiran_nama?: string | null;
+    tanggal?: string | null;
+    tanggal_selesai?: string | null;
+    waktu_mulai?: string | null;
+    waktu_selesai?: string | null;
 };
 
 export default function CatatanList({
@@ -57,7 +61,7 @@ export default function CatatanList({
         const supabase = createClient();
         const channel = supabase.channel("realtime-catatan").on(
             "postgres_changes",
-            { event: "*", schema: "public", table: "catatan_pekerjaan" },
+            { event: "*", schema: "public", table: "jadwal_kegiatan" },
             () => router.refresh()
         ).subscribe();
         return () => { supabase.removeChannel(channel); };
@@ -202,7 +206,7 @@ export default function CatatanList({
                                             <span className="truncate">{item.lampiran_nama || "Bukti Terunggah"}</span>
                                         </span>
                                     )}
-                                    {item.tautan_eksternal && (
+                                    {item.tautan_eksternal && !item.tautan_eksternal.startsWith("jadwal:") && (
                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50/60 border border-blue-200 text-blue-700 rounded font-medium">
                                             <ExternalLink className="w-3 h-3 text-blue-500 shrink-0" />
                                             <span>Tautan</span>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Calendar, MapPin, Check, ChevronDown, Loader2 } from "lucide-react";
+import { X, Calendar, MapPin, Check, ChevronDown, Loader2, UploadCloud, Image as ImageIcon } from "lucide-react";
 import { createClient } from "@/app/lib/supabase/client";
 import { DAFTAR_LOKASI } from "@/app/lib/constants";
 
@@ -16,11 +16,13 @@ export default function ModalTambahJadwal({ isOpen, onClose, onSuccess }: ModalP
     const [penanggungJawabNama, setPenanggungJawabNama] = useState("");
     const [penanggungJawabId, setPenanggungJawabId] = useState<string | null>(null);
     const [tanggal, setTanggal] = useState(new Date().toISOString().split("T")[0]);
+    const [tanggalSelesai, setTanggalSelesai] = useState(new Date().toISOString().split("T")[0]);
     const [waktuMulai, setWaktuMulai] = useState("08:00");
     const [waktuSelesai, setWaktuSelesai] = useState("10:00");
     const [lokasi, setLokasi] = useState("Ko+Lab");
     const [catatan, setCatatan] = useState("");
     const [tag, setTag] = useState("");
+    const [file, setFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
     const [members, setMembers] = useState<{ id: string; full_name: string; email: string }[]>([]);
     const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
@@ -112,17 +114,39 @@ export default function ModalTambahJadwal({ isOpen, onClose, onSuccess }: ModalP
 
         const primaryId = selectedMemberIds.length === 1 ? selectedMemberIds[0] : null;
 
+        let lampiranUrl: string | null = null;
+        let lampiranNama: string | null = null;
+
+        if (file) {
+            const ext = file.name.split(".").pop();
+            const filePath = `jadwal_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+            const { error: uploadError } = await supabase.storage
+                .from("berkas_catatan")
+                .upload(filePath, file);
+
+            if (!uploadError) {
+                const { data: publicUrlData } = supabase.storage
+                    .from("berkas_catatan")
+                    .getPublicUrl(filePath);
+                lampiranUrl = publicUrlData.publicUrl;
+                lampiranNama = file.name;
+            }
+        }
+
         const { error } = await supabase.from("jadwal_kegiatan").insert({
             nama_kegiatan: namaKegiatan,
             penanggung_jawab_id: isValidUUID(primaryId) ? primaryId : null,
             penanggung_jawab_nama: pjNama,
             tanggal: tanggal,
+            tanggal_selesai: tanggalSelesai || tanggal,
             waktu_mulai: waktuMulai,
             waktu_selesai: waktuSelesai,
             lokasi: lokasi || null,
             catatan: catatan || null,
             tag: finalTag,
             status: "terjadwal",
+            lampiran_url: lampiranUrl,
+            lampiran_nama: lampiranNama,
         });
 
         setLoading(false);
@@ -137,6 +161,7 @@ export default function ModalTambahJadwal({ isOpen, onClose, onSuccess }: ModalP
         setLokasi("");
         setCatatan("");
         setTag("");
+        setFile(null);
 
         if (onSuccess) onSuccess(tanggal);
         onClose();
@@ -167,7 +192,7 @@ export default function ModalTambahJadwal({ isOpen, onClose, onSuccess }: ModalP
 
                 {/* Form */}
                 <form onSubmit={handleSubmit}>
-                    <div className="p-5 space-y-4 text-xs">
+                    <div className="p-5 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
                         {/* Nama Kegiatan */}
                         <div className="space-y-1.5">
                             <label className="font-semibold text-gray-800">
@@ -234,10 +259,11 @@ export default function ModalTambahJadwal({ isOpen, onClose, onSuccess }: ModalP
                         </div>
 
                         {/* Tanggal & Waktu */}
+                        {/* Rentang Tanggal Mulai s/d Selesai */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                                 <label className="font-semibold text-gray-800">
-                                    Tanggal <span className="text-red-500">*</span>
+                                    Dari Tanggal <span className="text-red-500">*</span>
                                 </label>
                                 <div className="relative">
                                     <Calendar className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -246,7 +272,13 @@ export default function ModalTambahJadwal({ isOpen, onClose, onSuccess }: ModalP
                                         required
                                         min={minMonthStart}
                                         value={tanggal}
-                                        onChange={(e) => setTanggal(e.target.value)}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setTanggal(val);
+                                            if (tanggalSelesai < val) {
+                                                setTanggalSelesai(val);
+                                            }
+                                        }}
                                         className="w-full pl-8 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-xs text-gray-900 focus:outline-hidden focus:ring-1 focus:ring-green-700"
                                     />
                                 </div>
@@ -254,25 +286,43 @@ export default function ModalTambahJadwal({ isOpen, onClose, onSuccess }: ModalP
 
                             <div className="space-y-1.5">
                                 <label className="font-semibold text-gray-800">
-                                    Waktu (Mulai - Selesai) <span className="text-red-500">*</span>
+                                    Sampai Tanggal <span className="text-red-500">*</span>
                                 </label>
-                                <div className="flex items-center gap-1.5">
+                                <div className="relative">
+                                    <Calendar className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                                     <input
-                                        type="time"
+                                        type="date"
                                         required
-                                        value={waktuMulai}
-                                        onChange={(e) => setWaktuMulai(e.target.value)}
-                                        className="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-xs text-gray-900 focus:outline-hidden focus:ring-1 focus:ring-green-700 text-center"
-                                    />
-                                    <span className="text-gray-400 text-[11px] font-medium shrink-0">s/d</span>
-                                    <input
-                                        type="time"
-                                        required
-                                        value={waktuSelesai}
-                                        onChange={(e) => setWaktuSelesai(e.target.value)}
-                                        className="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-xs text-gray-900 focus:outline-hidden focus:ring-1 focus:ring-green-700 text-center"
+                                        min={tanggal}
+                                        value={tanggalSelesai}
+                                        onChange={(e) => setTanggalSelesai(e.target.value)}
+                                        className="w-full pl-8 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-xs text-gray-900 focus:outline-hidden focus:ring-1 focus:ring-green-700"
                                     />
                                 </div>
+                            </div>
+                        </div>
+
+                        {/* Waktu Pelaksanaan */}
+                        <div className="space-y-1.5">
+                            <label className="font-semibold text-gray-800">
+                                Waktu Pelaksanaan (Mulai - Selesai) <span className="text-red-500">*</span>
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                                <input
+                                    type="time"
+                                    required
+                                    value={waktuMulai}
+                                    onChange={(e) => setWaktuMulai(e.target.value)}
+                                    className="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-xs text-gray-900 focus:outline-hidden focus:ring-1 focus:ring-green-700 text-center"
+                                />
+                                <span className="text-gray-400 text-[11px] font-medium shrink-0">s/d</span>
+                                <input
+                                    type="time"
+                                    required
+                                    value={waktuSelesai}
+                                    onChange={(e) => setWaktuSelesai(e.target.value)}
+                                    className="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-xs text-gray-900 focus:outline-hidden focus:ring-1 focus:ring-green-700 text-center"
+                                />
                             </div>
                         </div>
 
@@ -295,6 +345,52 @@ export default function ModalTambahJadwal({ isOpen, onClose, onSuccess }: ModalP
                                 </select>
                                 <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                             </div>
+                        </div>
+
+                        {/* Upload Berkas / Dokumentasi */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                                <label className="font-semibold text-gray-800">
+                                    Dokumentasi / Foto Kegiatan <span className="text-gray-400 font-normal">(Opsional)</span>
+                                </label>
+                                <span className="text-[10px] text-gray-400 font-mono">Maks. 25MB</span>
+                            </div>
+                            <input
+                                type="file"
+                                id="file-jadwal-tambah"
+                                className="hidden"
+                                accept="image/*,.pdf,.csv"
+                                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                            />
+                            {!file ? (
+                                <label
+                                    htmlFor="file-jadwal-tambah"
+                                    className="border border-dashed border-gray-300 rounded-lg p-3 text-center bg-gray-50/50 hover:bg-gray-50 cursor-pointer transition-colors block"
+                                >
+                                    <div className="w-7 h-7 rounded-full bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-1">
+                                        <UploadCloud className="w-4 h-4" />
+                                    </div>
+                                    <p className="font-semibold text-gray-700 text-[11px]">Pilih foto atau bukti dokumen</p>
+                                    <p className="text-[10px] text-gray-400">JPG, PNG, PDF</p>
+                                </label>
+                            ) : (
+                                <div className="flex items-center justify-between p-2.5 bg-blue-50/40 border border-blue-200 rounded-lg">
+                                    <div className="flex items-center gap-2 overflow-hidden">
+                                        <ImageIcon className="w-4 h-4 text-blue-600 shrink-0" />
+                                        <div className="truncate">
+                                            <p className="font-semibold text-gray-800 truncate text-[11px]">{file.name}</p>
+                                            <p className="text-[9px] text-gray-400">{(file.size / 1024).toFixed(0)} KB</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFile(null)}
+                                        className="p-1 text-gray-400 hover:text-red-600 rounded-md"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Catatan */}

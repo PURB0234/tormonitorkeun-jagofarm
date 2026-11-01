@@ -1,20 +1,28 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import {
     ChevronLeft,
     ChevronRight,
+    Calendar,
     Plus,
     MapPin,
     Sprout,
     Droplets,
     Loader2,
     Trash2,
-    CheckCircle2
+    CheckCircle2,
+    Printer,
+    BarChart3,
+    RefreshCw,
+    CheckCheck,
 } from "lucide-react";
 import { createClient } from "@/app/lib/supabase/client";
 import ModalTambahJadwal from "@/app/components/modal/ModalTambahJadwal";
 import ModalEditJadwal from "@/app/components/modal/ModalEditJadwal";
+import GanttChartTim from "./components/GanttChartTim";
+import LaporanPdfPrint from "./components/LaporanPdfPrint";
+import { useRouter } from "next/navigation";
 
 type JadwalRow = {
     id: string;
@@ -22,12 +30,15 @@ type JadwalRow = {
     penanggung_jawab_id?: string | null;
     penanggung_jawab_nama: string;
     tanggal: string; // YYYY-MM-DD
+    tanggal_selesai?: string | null; // Tanggal Selesai (YYYY-MM-DD)
     waktu_mulai: string;
     waktu_selesai: string;
     lokasi?: string | null;
     catatan?: string | null;
     tag?: string | null;
     status: string;
+    lampiran_url?: string | null;
+    lampiran_nama?: string | null;
 };
 
 type ProfileMember = {
@@ -68,7 +79,8 @@ const BULAN_NAMES = [
 const HARI_NAMES = ["SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU", "MINGGU"];
 
 export default function JadwalTimPage() {
-    const [viewMode, setViewMode] = useState<"mingguan" | "bulanan">("mingguan");
+    const router = useRouter();
+    const [viewMode, setViewMode] = useState<"penjadwalan" | "gantt">("penjadwalan");
     const [selectedStaff, setSelectedStaff] = useState<string>("Semua");
     const [members, setMembers] = useState<ProfileMember[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -102,6 +114,8 @@ export default function JadwalTimPage() {
 
     const [completedMonths, setCompletedMonths] = useState<{ key: string; label: string; date: Date; count: number }[]>([]);
     const [selectedCompletedMonthKey, setSelectedCompletedMonthKey] = useState<string>("");
+    const [isOverUpdate, setIsOverUpdate] = useState(false);
+    const [isOverDoneUpdate, setIsOverDoneUpdate] = useState(false);
 
     const fetchActiveMonths = useCallback(async () => {
         const supabase = createClient();
@@ -203,16 +217,16 @@ export default function JadwalTimPage() {
 
     // Fungsi eksekusi hapus ke Supabase
     const handleDeleteJadwal = async (id: string, nama: string) => {
-        // 1. Hapus seketika dari state UI (layar langsung bersih tanpa tunggu loading)
+        // 1. Hapus seketika dari state UI
         setJadwals((prev) => prev.filter((item) => item.id !== id));
 
-        // 2. Eksekusi hapus di Supabase
         const supabase = createClient();
+
+        // 2. Hapus dari tabel jadwal_kegiatan (Single Source of Truth)
         const { error } = await supabase.from("jadwal_kegiatan").delete().eq("id", id);
 
         if (error) {
             alert("Gagal menghapus dari database: " + error.message);
-            // Jika gagal di server, ambil ulang data
             fetchJadwal();
             fetchActiveMonths();
             fetchCompletedMonths();
@@ -220,17 +234,22 @@ export default function JadwalTimPage() {
             fetchActiveMonths();
             fetchCompletedMonths();
         }
+
+        // 3. Sinkronkan modul seketika
+        router.refresh();
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("app:sync"));
+        }
     };
 
+    // 1. DONE SAJA: Mengubah status jadwal jadi selesai
     const handleCompleteJadwal = async (item: JadwalRow) => {
         const supabase = createClient();
 
-        // 1. Optimistic Update state jadwal di frontend
         setJadwals((prev) =>
             prev.map((j) => (j.id === item.id ? { ...j, status: "selesai" } : j))
         );
 
-        // 2. Update status jadwal_kegiatan di database
         const { error: updateError } = await supabase
             .from("jadwal_kegiatan")
             .update({ status: "selesai" })
@@ -243,59 +262,78 @@ export default function JadwalTimPage() {
             return;
         }
 
-        // 3. Otomatis buat data di tabel catatan_pekerjaan
-        const { error: insertCatatanError } = await supabase
-            .from("catatan_pekerjaan")
-            .insert({
-                judul: item.nama_kegiatan,
-                penanggung_jawab: item.penanggung_jawab_nama,
-                penanggung_jawab_id: item.penanggung_jawab_id || null,
-                status: "selesai",
-                lokasi: item.lokasi || "Ko+Lab",
-                deskripsi:
-                    item.catatan ||
-                    "Kegiatan telah dilaksanakan sesuai jadwal operasional (" +
-                    item.waktu_mulai.slice(0, 5) +
-                    " - " +
-                    item.waktu_selesai.slice(0, 5) +
-                    ").",
-            });
-
-        if (insertCatatanError) {
-            console.error("Gagal sinkron ke catatan:", insertCatatanError.message);
-        }
-
-        // 4. Perbarui bulan beragenda
         fetchActiveMonths();
         fetchCompletedMonths();
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("app:sync"));
+        }
+        router.refresh();
     };
 
-    // Ambil data jadwal dari Supabase
+    // 2. UPDATE SAJA: Kembalikan status jadwal ke 'terjadwal' (dikerjakan)
+    const handleUpdateOnlyToCatatan = async (item: JadwalRow) => {
+        const supabase = createClient();
+
+        setJadwals((prev) =>
+            prev.map((j) => (j.id === item.id ? { ...j, status: "terjadwal" } : j))
+        );
+
+        await supabase
+            .from("jadwal_kegiatan")
+            .update({ status: "terjadwal" })
+            .eq("id", item.id);
+
+        fetchActiveMonths();
+        fetchCompletedMonths();
+        router.refresh();
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("app:sync"));
+        }
+    };
+
+    // 3. DONE + UPDATE: Mengubah status jadwal menjadi 'selesai'
+    const handleDoneAndUpdateCatatan = async (item: JadwalRow) => {
+        const supabase = createClient();
+
+        setJadwals((prev) =>
+            prev.map((j) => (j.id === item.id ? { ...j, status: "selesai" } : j))
+        );
+
+        await supabase
+            .from("jadwal_kegiatan")
+            .update({ status: "selesai" })
+            .eq("id", item.id);
+
+        fetchActiveMonths();
+        fetchCompletedMonths();
+        router.refresh();
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("app:sync"));
+        }
+    };
+
+    // Ambil seluruh data jadwal dari Supabase (lengkap untuk Kanban mingguan & Gantt chart timeline)
     const fetchJadwal = useCallback(async () => {
         const supabase = createClient();
-        const startStr = toIsoDate(monday);
-        const endStr = toIsoDate(sunday);
-
         const { data, error } = await supabase
             .from("jadwal_kegiatan")
             .select("*")
-            .gte("tanggal", startStr)
-            .lte("tanggal", endStr)
+            .order("tanggal", { ascending: true })
             .order("waktu_mulai", { ascending: true });
 
         if (!error && data) {
             setJadwals(data);
         }
         setLoading(false);
-    }, [monday, sunday]);
+    }, []);
 
     useEffect(() => {
         fetchJadwal();
 
-        // Realtime subscription
+        // Realtime subscription ke jadwal_kegiatan
         const supabase = createClient();
         const channel = supabase
-            .channel("realtime-jadwal")
+            .channel("realtime-jadwal-single")
             .on("postgres_changes", { event: "*", schema: "public", table: "jadwal_kegiatan" }, () => {
                 fetchJadwal();
                 fetchActiveMonths();
@@ -306,7 +344,7 @@ export default function JadwalTimPage() {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [fetchJadwal]);
+    }, [fetchJadwal, fetchActiveMonths, fetchCompletedMonths]);
 
     useEffect(() => {
         const onGlobalSync = () => {
@@ -343,8 +381,11 @@ export default function JadwalTimPage() {
 
             // Cocokkan tanggal (ambil 10 karakter pertama YYYY-MM-DD)
             const dayTasks = jadwals.filter((item) => {
-                const itemIso = String(item.tanggal).slice(0, 10);
-                return itemIso === iso;
+                const startIso = String(item.tanggal).slice(0, 10);
+                const endIso = item.tanggal_selesai
+                    ? String(item.tanggal_selesai).slice(0, 10)
+                    : startIso;
+                return iso >= startIso && iso <= endIso;
             });
 
             return {
@@ -415,34 +456,46 @@ export default function JadwalTimPage() {
                         </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                        Koordinasi kegiatan lapangan, panen, perawatan, dan kunjungan mitra.
+                        Koordinasi kegiatan lapangan, panen, perawatan
                     </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2.5">
                     <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200 text-xs font-medium">
                         <button
                             type="button"
-                            onClick={() => setViewMode("mingguan")}
-                            className={`px-3 py-1 rounded-md transition ${viewMode === "mingguan"
+                            onClick={() => setViewMode("penjadwalan")}
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition cursor-pointer ${viewMode === "penjadwalan"
                                 ? "bg-white text-gray-900 shadow-2xs font-semibold"
                                 : "text-gray-600 hover:text-gray-900"
                                 }`}
                         >
-                            Mingguan
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>Mode Penjadwalan</span>
                         </button>
                         <button
                             type="button"
-                            onClick={() => setViewMode("bulanan")}
-                            className={`px-3 py-1 rounded-md transition ${viewMode === "bulanan"
+                            onClick={() => setViewMode("gantt")}
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition cursor-pointer ${viewMode === "gantt"
                                 ? "bg-white text-gray-900 shadow-2xs font-semibold"
                                 : "text-gray-600 hover:text-gray-900"
                                 }`}
                         >
-                            Bulanan
+                            <BarChart3 className="w-3.5 h-3.5" />
+                            <span>Mode Gantt Chart</span>
                         </button>
-
                     </div>
+
+                    {/* Tombol Cetak PDF / Laporan */}
+                    <button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold transition shadow-2xs cursor-pointer"
+                        title="Cetak Laporan Resmi atau Ekspor ke PDF"
+                    >
+                        <Printer className="w-3.5 h-3.5 text-gray-600" />
+                        <span>Cetak Laporan</span>
+                    </button>
 
                     <button
                         type="button"
@@ -560,20 +613,18 @@ export default function JadwalTimPage() {
                             value={selectedMonthKey}
                             onChange={(e) => {
                                 const val = e.target.value;
-                                if (!val) return;
                                 setSelectedMonthKey(val);
-                                setSelectedCompletedMonthKey(""); // Reset dropdown sebelah
-                                setFilterStatus("terjadwal");     // Otomatis arahkan ke filter aktif
-                                const target = activeMonths.find((m) => m.key === val);
-                                if (target) {
-                                    setAnchorDate(new Date(target.date.getTime()));
+                                if (val) {
+                                    setSelectedCompletedMonthKey(""); // Reset dropdown sebelah
+                                    const target = activeMonths.find((m) => m.key === val);
+                                    if (target) {
+                                        setAnchorDate(new Date(target.date.getTime()));
+                                    }
                                 }
                             }}
                             className="px-2.5 py-1 bg-white border border-gray-300 rounded-lg text-xs font-semibold text-gray-800 hover:border-gray-400 focus:outline-hidden focus:ring-1 focus:ring-green-700 cursor-pointer"
                         >
-                            <option value="">
-                                {activeMonths.length > 0 ? "-- Pilih Bulan --" : "-- Tidak Ada Agenda --"}
-                            </option>
+                            <option value="">-- Tidak Ada Filter --</option>
                             {activeMonths.map((m) => (
                                 <option key={m.key} value={m.key}>
                                     {m.label}
@@ -589,20 +640,18 @@ export default function JadwalTimPage() {
                             value={selectedCompletedMonthKey}
                             onChange={(e) => {
                                 const val = e.target.value;
-                                if (!val) return;
                                 setSelectedCompletedMonthKey(val);
-                                setSelectedMonthKey("");       // Reset dropdown sebelah
-                                setFilterStatus("selesai");    // Otomatis alihkan tampilan ke yang selesai
-                                const target = completedMonths.find((m) => m.key === val);
-                                if (target) {
-                                    setAnchorDate(new Date(target.date.getTime()));
+                                if (val) {
+                                    setSelectedMonthKey("");       // Reset dropdown sebelah
+                                    const target = completedMonths.find((m) => m.key === val);
+                                    if (target) {
+                                        setAnchorDate(new Date(target.date.getTime()));
+                                    }
                                 }
                             }}
-                            className="px-2.5 py-1 bg-white border border-emerald-300 rounded-lg text-xs font-semibold text-emerald-900 hover:border-emerald-400 focus:outline-hidden focus:ring-1 focus:ring-emerald-700 cursor-pointer"
+                            className="px-2.5 py-1 bg-white border border-gray-300 rounded-lg text-xs font-semibold text-gray-800 hover:border-gray-400 focus:outline-hidden focus:ring-1 focus:ring-green-700 cursor-pointer"
                         >
-                            <option value="">
-                                {completedMonths.length > 0 ? "-- Riwayat Selesai --" : "-- Belum Ada Selesai --"}
-                            </option>
+                            <option value="">-- Tidak Ada Filter --</option>
                             {completedMonths.map((m) => (
                                 <option key={m.key} value={m.key}>
                                     {"✓ " + m.label}
@@ -613,247 +662,271 @@ export default function JadwalTimPage() {
                 </div>
             </div>
 
-            {/* Grid Kalender 7 Kolom */}
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
-                <div className="overflow-x-auto">
-                    <div className="grid grid-cols-7 min-w-[960px] divide-x divide-gray-200">
-                        {weekDays.map((day) => {
-                            // Cek apakah tanggal ini berada di bulan sebelum bulan real saat ini
-                            const [dayY, dayM] = day.iso.split("-").map(Number);
-                            const isPastMonth =
-                                dayY < realCurrentYear ||
-                                (dayY === realCurrentYear && dayM - 1 < realCurrentMonth);
+            {/* Tampilan Kalender Mingguan ATAU Gantt Chart */}
+            {viewMode === "gantt" ? (
+                <GanttChartTim
+                    weekDays={weekDays}
+                    jadwals={jadwals}
+                    filterStatus={filterStatus}
+                    selectedStaff={selectedStaff}
+                    anchorDate={anchorDate}
+                    onSelectTask={(task) => {
+                        setSelectedJadwalToEdit(task);
+                        setIsEditModalOpen(true);
+                    }}
+                    getDotColor={getDotColor}
+                    realCurrentYear={realCurrentYear}
+                    realCurrentMonth={realCurrentMonth}
+                />
+            ) : (
+                /* Grid Kalender 7 Kolom */
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
+                    <div className="overflow-x-auto">
+                        <div className="grid grid-cols-7 min-w-[960px] divide-x divide-gray-200">
+                            {weekDays.map((day) => {
+                                // Cek apakah tanggal ini berada di bulan sebelum bulan real saat ini
+                                const [dayY, dayM] = day.iso.split("-").map(Number);
+                                const isPastMonth =
+                                    dayY < realCurrentYear ||
+                                    (dayY === realCurrentYear && dayM - 1 < realCurrentMonth);
 
-                            const isMatchStaff = (task: JadwalRow) => {
-                                if (selectedStaff === "Semua") return true;
-                                const pj = task.penanggung_jawab_nama.toLowerCase();
-                                const query = selectedStaff.toLowerCase().split(" ")[0];
-                                return pj.includes("tim") || pj.includes(query);
-                            };
+                                const isMatchStaff = (task: JadwalRow) => {
+                                    if (selectedStaff === "Semua") return true;
+                                    const pj = task.penanggung_jawab_nama.toLowerCase();
+                                    const query = selectedStaff.toLowerCase().split(" ")[0];
+                                    return pj.includes("tim") || pj.includes(query);
+                                };
 
-                            const isMatchStatus = (task: JadwalRow) => {
-                                if (filterStatus === "semua") return true;
-                                if (filterStatus === "selesai") return task.status === "selesai";
-                                return task.status !== "selesai";
-                            };
+                                const isMatchStatus = (task: JadwalRow) => {
+                                    if (filterStatus === "semua") return true;
+                                    if (filterStatus === "selesai") return task.status === "selesai";
+                                    return task.status !== "selesai";
+                                };
 
-                            const displayedTasks = day.tasks.filter(
-                                (t) => isMatchStaff(t) && isMatchStatus(t)
-                            );
+                                const displayedTasks = day.tasks.filter(
+                                    (t) => isMatchStaff(t) && isMatchStatus(t)
+                                );
 
-                            return (
-                                <div
-                                    key={day.iso}
-                                    className={`flex flex-col min-h-[460px] transition ${isPastMonth
-                                        ? "bg-gray-100/60 opacity-60"
-                                        : day.isToday && displayedTasks.length > 0
-                                            ? "bg-slate-50/50"
-                                            : "bg-white"
-                                        }`}
-                                >
-                                    {/* Header Tanggal */}
+                                return (
                                     <div
-                                        className={`p-3 border-b border-gray-200 flex items-start justify-between ${isPastMonth
-                                            ? "bg-gray-200/50"
+                                        key={day.iso}
+                                        className={`flex flex-col min-h-[460px] transition ${isPastMonth
+                                            ? "bg-gray-100/60 opacity-60"
                                             : day.isToday && displayedTasks.length > 0
-                                                ? "bg-slate-100/70"
-                                                : "bg-slate-50/70"
+                                                ? "bg-slate-50/50"
+                                                : "bg-white"
                                             }`}
                                     >
-                                        <div>
-                                            <span className="text-[10px] font-semibold text-gray-500 tracking-wider uppercase block">
-                                                {day.hari}
-                                            </span>
-                                            <span className="text-sm font-bold text-gray-900 mt-0.5 block">
-                                                {day.tanggal}
-                                            </span>
+                                        {/* Header Tanggal */}
+                                        <div
+                                            className={`p-3 border-b border-gray-200 flex items-start justify-between ${isPastMonth
+                                                ? "bg-gray-200/50"
+                                                : day.isToday && displayedTasks.length > 0
+                                                    ? "bg-slate-100/70"
+                                                    : "bg-slate-50/70"
+                                                }`}
+                                        >
+                                            <div>
+                                                <span className="text-[10px] font-semibold text-gray-500 tracking-wider uppercase block">
+                                                    {day.hari}
+                                                </span>
+                                                <span className="text-sm font-bold text-gray-900 mt-0.5 block">
+                                                    {day.tanggal}
+                                                </span>
+                                            </div>
+
+                                            {isPastMonth && (
+                                                <span className="text-[9px] font-medium text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded">
+                                                    Lewat
+                                                </span>
+                                            )}
+
+                                            {!isPastMonth && day.isToday && displayedTasks.length > 0 && (
+                                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                                                    Hari ini
+                                                </span>
+                                            )}
                                         </div>
 
-                                        {isPastMonth && (
-                                            <span className="text-[9px] font-medium text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded">
-                                                Lewat
-                                            </span>
-                                        )}
+                                        {/* Isi Kartu */}
+                                        <div className="p-2.5 space-y-2.5 flex-1">
+                                            {loading ? (
+                                                <div className="flex justify-center items-center py-8 text-gray-400">
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    {displayedTasks.map((t) => {
+                                                        const formatTime = (timeStr: string) => timeStr.slice(0, 5);
+                                                        const isPanen = t.tag?.toUpperCase() === "PANEN";
+                                                        const isTim = t.tag?.toLowerCase().includes("tim");
+                                                        const isSelesai = t.status === "selesai";
 
-                                        {!isPastMonth && day.isToday && displayedTasks.length > 0 && (
-                                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                                                Hari ini
-                                            </span>
-                                        )}
-                                    </div>
-
-                                    {/* Isi Kartu */}
-                                    <div className="p-2.5 space-y-2.5 flex-1">
-                                        {loading ? (
-                                            <div className="flex justify-center items-center py-8 text-gray-400">
-                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                            </div>
-                                        ) : (
-                                            <>
-                                                {displayedTasks.map((t) => {
-                                                    const formatTime = (timeStr: string) => timeStr.slice(0, 5);
-                                                    const isPanen = t.tag?.toUpperCase() === "PANEN";
-                                                    const isTim = t.tag?.toLowerCase().includes("tim");
-                                                    const isSelesai = t.status === "selesai";
-
-                                                    return (
-                                                        <div
-                                                            key={t.id}
-                                                            draggable={true}
-                                                            onClick={() => {
-                                                                setSelectedJadwalToEdit(t);
-                                                                setIsEditModalOpen(true);
-                                                            }}
-                                                            onDoubleClick={(e) => {
-                                                                e.stopPropagation();
-                                                                if (isSelesai) {
-                                                                    if (confirm("Hapus agenda \"" + t.nama_kegiatan + "\"?")) {
-                                                                        handleDeleteJadwal(t.id, t.nama_kegiatan);
-                                                                    }
-                                                                } else {
-                                                                    const aksi = confirm(
-                                                                        "Klik OK untuk TANDAI SELESAI (Masuk Catatan),\natau Batal jika ingin Hapus."
-                                                                    );
-                                                                    if (aksi) {
-                                                                        handleCompleteJadwal(t);
-                                                                    } else {
-                                                                        if (confirm("Hapus agenda ini secara permanen?")) {
+                                                        return (
+                                                            <div
+                                                                key={t.id}
+                                                                draggable={true}
+                                                                onClick={() => {
+                                                                    setSelectedJadwalToEdit(t);
+                                                                    setIsEditModalOpen(true);
+                                                                }}
+                                                                onDoubleClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (isSelesai) {
+                                                                        if (confirm("Hapus agenda \"" + t.nama_kegiatan + "\"?")) {
                                                                             handleDeleteJadwal(t.id, t.nama_kegiatan);
                                                                         }
+                                                                    } else {
+                                                                        const aksi = confirm(
+                                                                            "Klik OK untuk TANDAI SELESAI (Masuk Catatan),\natau Batal jika ingin Hapus."
+                                                                        );
+                                                                        if (aksi) {
+                                                                            handleCompleteJadwal(t);
+                                                                        } else {
+                                                                            if (confirm("Hapus agenda ini secara permanen?")) {
+                                                                                handleDeleteJadwal(t.id, t.nama_kegiatan);
+                                                                            }
+                                                                        }
                                                                     }
+                                                                }}
+                                                                onDragStart={(e) => {
+                                                                    draggedIdRef.current = t.id;
+                                                                    setDraggedItem(t);
+                                                                    e.dataTransfer.setData("text/plain", t.id);
+                                                                    e.dataTransfer.effectAllowed = "move";
+                                                                }}
+                                                                onDragEnd={() => {
+                                                                    draggedIdRef.current = null;
+                                                                    setDraggedItem(null);
+                                                                    setIsOverTrash(false);
+                                                                    setIsOverDone(false);
+                                                                }}
+                                                                className={
+                                                                    "group relative border rounded-lg p-2.5 shadow-2xs space-y-2 transition cursor-pointer select-none " +
+                                                                    (draggedItem?.id === t.id
+                                                                        ? "opacity-30 border-dashed border-emerald-400 scale-95"
+                                                                        : isSelesai
+                                                                            ? "bg-emerald-50/40 border-emerald-300 hover:border-emerald-400"
+                                                                            : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-xs")
                                                                 }
-                                                            }}
-                                                            onDragStart={(e) => {
-                                                                draggedIdRef.current = t.id;
-                                                                setDraggedItem(t);
-                                                                e.dataTransfer.setData("text/plain", t.id);
-                                                                e.dataTransfer.effectAllowed = "move";
-                                                            }}
-                                                            onDragEnd={() => {
-                                                                draggedIdRef.current = null;
-                                                                setDraggedItem(null);
-                                                                setIsOverTrash(false);
-                                                                setIsOverDone(false);
-                                                            }}
-                                                            className={
-                                                                "group relative border rounded-lg p-2.5 shadow-2xs space-y-2 transition cursor-pointer select-none " +
-                                                                (draggedItem?.id === t.id
-                                                                    ? "opacity-30 border-dashed border-emerald-400 scale-95"
-                                                                    : isSelesai
-                                                                        ? "bg-emerald-50/40 border-emerald-300 hover:border-emerald-400"
-                                                                        : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-xs")
-                                                            }
-                                                        >
-                                                            {/* Tombol Aksi Cepat saat Hover: Selesai & Hapus */}
-                                                            <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition z-10">
-                                                                {!isSelesai && (
+                                                            >
+                                                                {/* Tombol Aksi Cepat saat Hover: Selesai & Hapus */}
+                                                                <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition z-10">
+                                                                    {!isSelesai && (
+                                                                        <button
+                                                                            type="button"
+                                                                            title="Tandai Selesai (Masuk Catatan)"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleCompleteJadwal(t);
+                                                                            }}
+                                                                            className="p-1 text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 rounded border border-emerald-200 transition"
+                                                                        >
+                                                                            <CheckCircle2 className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    )}
                                                                     <button
                                                                         type="button"
-                                                                        title="Tandai Selesai (Masuk Catatan)"
+                                                                        title="Hapus jadwal"
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
-                                                                            handleCompleteJadwal(t);
+                                                                            if (confirm("Hapus jadwal \"" + t.nama_kegiatan + "\"?")) {
+                                                                                handleDeleteJadwal(t.id, t.nama_kegiatan);
+                                                                            }
                                                                         }}
-                                                                        className="p-1 text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 rounded border border-emerald-200 transition"
+                                                                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 bg-white rounded border border-gray-200 transition"
                                                                     >
-                                                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                                                        <Trash2 className="w-3.5 h-3.5" />
                                                                     </button>
-                                                                )}
-                                                                <button
-                                                                    type="button"
-                                                                    title="Hapus jadwal"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        if (confirm("Hapus jadwal \"" + t.nama_kegiatan + "\"?")) {
-                                                                            handleDeleteJadwal(t.id, t.nama_kegiatan);
-                                                                        }
-                                                                    }}
-                                                                    className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 bg-white rounded border border-gray-200 transition"
-                                                                >
-                                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                                </button>
-                                                            </div>
-
-                                                            <div className="flex items-center justify-between gap-1">
-                                                                <span className="text-[10px] font-medium text-gray-500">
-                                                                    {formatTime(t.waktu_mulai)} - {formatTime(t.waktu_selesai)}
-                                                                </span>
-
-                                                                {isSelesai ? (
-                                                                    <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                                                                        <CheckCircle2 className="w-2.5 h-2.5" />
-                                                                        SELESAI
-                                                                    </span>
-                                                                ) : (
-                                                                    <>
-                                                                        {isPanen && (
-                                                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                                                                                PANEN
-                                                                            </span>
-                                                                        )}
-                                                                        {isTim && (
-                                                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">
-                                                                                {t.tag}
-                                                                            </span>
-                                                                        )}
-                                                                    </>
-                                                                )}
-                                                            </div>
-
-                                                            <h2
-                                                                className={`text-xs font-semibold leading-snug ${isSelesai ? "text-emerald-950 line-through decoration-emerald-600/60" : "text-gray-900"
-                                                                    }`}
-                                                            >
-                                                                {t.nama_kegiatan}
-                                                            </h2>
-
-                                                            <div className="space-y-1 pt-1 border-t border-gray-100 text-[11px] text-gray-600">
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <span
-                                                                        className={
-                                                                            "w-1.5 h-1.5 rounded-full shrink-0 " +
-                                                                            getDotColor(t.penanggung_jawab_nama)
-                                                                        }
-                                                                    />
-                                                                    <span className="truncate">{t.penanggung_jawab_nama}</span>
                                                                 </div>
-                                                                {t.lokasi && (
-                                                                    <div className="flex items-center gap-1.5 text-gray-400">
-                                                                        <MapPin className="w-3 h-3 shrink-0" />
-                                                                        <span className="truncate text-[10px] text-gray-500">
-                                                                            {t.lokasi}
-                                                                        </span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
 
-                                                {/* Placeholder Kosong */}
-                                                {displayedTasks.length === 0 && (
-                                                    <div className="h-full min-h-[140px] border border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center p-3 text-center">
-                                                        {isPastMonth ? (
-                                                            <span className="text-xs font-medium text-gray-400">
-                                                                Bulan lampau
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-xs font-medium text-gray-500">
-                                                                Tidak ada agenda
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </>
-                                        )}
+                                                                <div className="flex items-center justify-between gap-1">
+                                                                    <span className="text-[10px] font-medium text-gray-500">
+                                                                        {formatTime(t.waktu_mulai)} - {formatTime(t.waktu_selesai)}
+                                                                    </span>
+
+                                                                    {t.status === "perlu_update" && (
+                                                                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200 animate-pulse">
+                                                                            PERLU UPDATE
+                                                                        </span>
+                                                                    )}
+
+                                                                    {isSelesai ? (
+                                                                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                                                            <CheckCircle2 className="w-2.5 h-2.5" />
+                                                                            SELESAI
+                                                                        </span>
+                                                                    ) : (
+                                                                        <>
+                                                                            {isPanen && (
+                                                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                                                                    PANEN
+                                                                                </span>
+                                                                            )}
+                                                                            {isTim && (
+                                                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">
+                                                                                    {t.tag}
+                                                                                </span>
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                </div>
+
+                                                                <h2
+                                                                    className={`text-xs font-semibold leading-snug ${isSelesai ? "text-emerald-950 line-through decoration-emerald-600/60" : "text-gray-900"
+                                                                        }`}
+                                                                >
+                                                                    {t.nama_kegiatan}
+                                                                </h2>
+
+                                                                <div className="space-y-1 pt-1 border-t border-gray-100 text-[11px] text-gray-600">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span
+                                                                            className={
+                                                                                "w-1.5 h-1.5 rounded-full shrink-0 " +
+                                                                                getDotColor(t.penanggung_jawab_nama)
+                                                                            }
+                                                                        />
+                                                                        <span className="truncate">{t.penanggung_jawab_nama}</span>
+                                                                    </div>
+                                                                    {t.lokasi && (
+                                                                        <div className="flex items-center gap-1.5 text-gray-400">
+                                                                            <MapPin className="w-3 h-3 shrink-0" />
+                                                                            <span className="truncate text-[10px] text-gray-500">
+                                                                                {t.lokasi}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+
+                                                    {/* Placeholder Kosong */}
+                                                    {displayedTasks.length === 0 && (
+                                                        <div className="h-full min-h-[140px] border border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center p-3 text-center">
+                                                            {isPastMonth ? (
+                                                                <span className="text-xs font-medium text-gray-400">
+                                                                    Bulan lampau
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-xs font-medium text-gray-500">
+                                                                    Tidak ada agenda
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
 
             {/* Footer Penanggung Jawab */}
             <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500 pt-1 px-1">
@@ -901,42 +974,108 @@ export default function JadwalTimPage() {
                 }}
             />
 
-            {/* Dual Drop Zones: Selesai (Kiri) & Hapus (Kanan) saat Kartu Di-drag */}
+            {/* Drop Zones saat Kartu Di-drag */}
             <div
-                className={`fixed bottom-6 inset-x-0 mx-auto max-w-xl z-50 flex items-center justify-center gap-4 px-4 transition-all duration-300 ${draggedItem
+                className={`fixed bottom-6 inset-x-0 mx-auto max-w-3xl z-50 flex items-center justify-center gap-2.5 px-4 transition-all duration-300 ${draggedItem
                     ? "opacity-100 translate-y-0 pointer-events-auto"
                     : "opacity-0 translate-y-12 pointer-events-none"
                     }`}
             >
-                {/* 1. Zona Selesai / Done (Hijau) */}
-                <div
-                    onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = "move";
-                        setIsOverDone(true);
-                    }}
-                    onDragLeave={() => setIsOverDone(false)}
-                    onDrop={(e) => {
-                        e.preventDefault();
-                        if (draggedItem) {
-                            handleCompleteJadwal(draggedItem);
-                        }
-                        draggedIdRef.current = null;
-                        setDraggedItem(null);
-                        setIsOverDone(false);
-                    }}
-                    className={`flex-1 flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl border-2 transition-all duration-200 shadow-xl cursor-copy ${isOverDone
-                        ? "bg-emerald-600 border-emerald-700 text-white scale-105 ring-4 ring-emerald-200"
-                        : "bg-white border-emerald-500 text-emerald-700"
-                        }`}
-                >
-                    <CheckCircle2 className={"w-5 h-5 " + (isOverDone ? "animate-bounce" : "")} />
-                    <span className="text-xs font-bold">
-                        {isOverDone ? "Lepas untuk Selesai & Masuk Catatan!" : "Tarik ke Sini: Selesai / Done"}
-                    </span>
-                </div>
+                {/* 1. Kondisi Normal (tidak perlu update): Hanya tampilkan Selesai (Done) */}
+                {draggedItem?.status !== "perlu_update" && (
+                    <div
+                        onDragOver={(e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = "move";
+                            setIsOverDone(true);
+                        }}
+                        onDragLeave={() => setIsOverDone(false)}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            if (draggedItem) {
+                                handleCompleteJadwal(draggedItem);
+                            }
+                            draggedIdRef.current = null;
+                            setDraggedItem(null);
+                            setIsOverDone(false);
+                        }}
+                        className={`flex-1 flex items-center justify-center gap-2.5 py-3.5 px-5 rounded-2xl border-2 transition-all duration-200 shadow-xl cursor-copy ${isOverDone
+                            ? "bg-emerald-600 border-emerald-700 text-white scale-105 ring-4 ring-emerald-200"
+                            : "bg-white border-emerald-500 text-emerald-700 hover:bg-emerald-50/50"
+                            }`}
+                    >
+                        <CheckCircle2 className={"w-5 h-5 shrink-0 " + (isOverDone ? "animate-bounce" : "")} />
+                        <div className="text-left">
+                            <div className="text-xs font-bold leading-tight">Selesai / Done</div>
+                            <div className="text-[10px] opacity-80 leading-tight">Tandai agenda selesai</div>
+                        </div>
+                    </div>
+                )}
 
-                {/* 2. Zona Hapus / Trash (Merah) */}
+                {/* 2. Kondisi Perlu Update: Hanya tampilkan Update Catatan & Done + Update */}
+                {draggedItem?.status === "perlu_update" && (
+                    <>
+                        {/* Zona Update Saja (Belum Selesai) */}
+                        <div
+                            onDragOver={(e) => {
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = "move";
+                                setIsOverUpdate(true);
+                            }}
+                            onDragLeave={() => setIsOverUpdate(false)}
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                if (draggedItem) {
+                                    handleUpdateOnlyToCatatan(draggedItem);
+                                }
+                                draggedIdRef.current = null;
+                                setDraggedItem(null);
+                                setIsOverUpdate(false);
+                            }}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-2xl border-2 transition-all duration-200 shadow-xl cursor-copy ${isOverUpdate
+                                ? "bg-blue-600 border-blue-700 text-white scale-105 ring-4 ring-blue-200"
+                                : "bg-white border-blue-400 text-blue-700 hover:bg-blue-50/50"
+                                }`}
+                        >
+                            <RefreshCw className={"w-4 h-4 shrink-0 " + (isOverUpdate ? "animate-spin" : "")} />
+                            <div className="text-left">
+                                <div className="text-[11px] font-bold leading-tight">Update Catatan</div>
+                                <div className="text-[9px] opacity-80 leading-tight">Sinkron data (Dikerjakan)</div>
+                            </div>
+                        </div>
+
+                        {/* Zona Done + Update (Selesai & Update) */}
+                        <div
+                            onDragOver={(e) => {
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = "move";
+                                setIsOverDoneUpdate(true);
+                            }}
+                            onDragLeave={() => setIsOverDoneUpdate(false)}
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                if (draggedItem) {
+                                    handleDoneAndUpdateCatatan(draggedItem);
+                                }
+                                draggedIdRef.current = null;
+                                setDraggedItem(null);
+                                setIsOverDoneUpdate(false);
+                            }}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-2xl border-2 transition-all duration-200 shadow-xl cursor-copy ${isOverDoneUpdate
+                                ? "bg-[#1E5E35] border-green-800 text-white scale-105 ring-4 ring-green-200"
+                                : "bg-white border-[#1E5E35] text-[#1E5E35] hover:bg-green-50/50"
+                                }`}
+                        >
+                            <CheckCheck className={"w-4 h-4 shrink-0 " + (isOverDoneUpdate ? "animate-bounce" : "")} />
+                            <div className="text-left">
+                                <div className="text-[11px] font-bold leading-tight">Done + Update</div>
+                                <div className="text-[9px] opacity-80 leading-tight">Sinkron data & Selesai</div>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {/* 3. Zona Hapus / Trash (Merah) - Selalu Tampil */}
                 <div
                     onDragOver={(e) => {
                         e.preventDefault();
@@ -953,17 +1092,29 @@ export default function JadwalTimPage() {
                         setDraggedItem(null);
                         setIsOverTrash(false);
                     }}
-                    className={`flex-1 flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl border-2 transition-all duration-200 shadow-xl cursor-no-drop ${isOverTrash
+                    className={`w-28 flex items-center justify-center gap-1.5 py-3 px-2 rounded-2xl border-2 transition-all duration-200 shadow-xl cursor-no-drop ${isOverTrash
                         ? "bg-red-600 border-red-700 text-white scale-105 ring-4 ring-red-200"
-                        : "bg-white border-red-400 text-red-600"
+                        : "bg-white border-red-400 text-red-600 hover:bg-red-50/50"
                         }`}
                 >
-                    <Trash2 className={"w-5 h-5 " + (isOverTrash ? "animate-bounce" : "")} />
-                    <span className="text-xs font-bold">
-                        {isOverTrash ? "Lepas untuk Hapus!" : "Tarik ke Sini: Hapus"}
-                    </span>
+                    <Trash2 className={"w-4 h-4 shrink-0 " + (isOverTrash ? "animate-bounce" : "")} />
+                    <span className="text-[11px] font-bold">Hapus</span>
                 </div>
             </div>
+
+            {/* Dokumen Laporan Siap Cetak / Convert PDF */}
+            <LaporanPdfPrint
+                jadwals={jadwals}
+                periodeText={monday.getDate() + " " + BULAN_NAMES[monday.getMonth()].slice(0, 3) + " - " + sunday.getDate() + " " + BULAN_NAMES[sunday.getMonth()].slice(0, 3) + " " + sunday.getFullYear()}
+                generatedAt={new Date().toLocaleDateString("id-ID", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                })}
+            />
         </main>
     );
 }

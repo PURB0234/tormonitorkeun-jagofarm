@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { createClient } from "@/app/lib/supabase/server";
 import CatatanWorkspace from "./components/CatatanWorkspace";
 
@@ -11,20 +14,37 @@ export default async function CatatanPekerjaanPage({
 
     // Sesi & role user saat ini
     const { data: { user } } = await supabase.auth.getUser();
-    const [profileRes, catatansRes] = await Promise.all([
+    const [profileRes, jadwalsRes] = await Promise.all([
         supabase
             .from("profiles")
             .select("role, full_name, email")
             .eq("id", user?.id ?? "")
             .maybeSingle(),
-        supabase.from("catatan_pekerjaan")
-            .select("id, created_at, judul, penanggung_jawab,penanggung_jawab_id, status, lokasi, deskripsi, tautan_eksternal, lampiran_url, lampiran_nama")
-            .order("created_at", { ascending: false })
-            .limit(100),
+        supabase.from("jadwal_kegiatan")
+            .select("*")
+            .order("created_at", { ascending: false }),
     ]);
 
     const profile = profileRes.data;
-    const catatans = catatansRes.data ?? [];
+    
+    // Normalisasi: Catatan Pekerjaan menggunakan Single Source of Truth dari jadwal_kegiatan
+    const catatans = (jadwalsRes.data ?? []).map((row) => ({
+        id: row.id,
+        created_at: row.created_at,
+        judul: row.nama_kegiatan,
+        penanggung_jawab: row.penanggung_jawab_nama,
+        penanggung_jawab_id: row.penanggung_jawab_id,
+        status: (row.status === "selesai" ? "selesai" : "dikerjakan") as "dikerjakan" | "selesai",
+        lokasi: row.lokasi || "Ko+Lab",
+        deskripsi: row.catatan || "",
+        tautan_eksternal: row.tautan_eksternal || null,
+        lampiran_url: row.lampiran_url || null,
+        lampiran_nama: row.lampiran_nama || null,
+        tanggal: row.tanggal,
+        tanggal_selesai: row.tanggal_selesai || row.tanggal,
+        waktu_mulai: row.waktu_mulai,
+        waktu_selesai: row.waktu_selesai,
+    }));
 
     const currentUser = {
         id: user?.id ?? "",

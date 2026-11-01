@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import CatatanList, { Catatan } from "./CatatanList";
 import CatatanDetail from "./CatatanDetail";
 import CatatanHeader, { SortOption } from "./CatatanHeader";
@@ -16,9 +17,16 @@ export default function CatatanWorkspace({
     currentUser: { id: string; role: string; name: string };
     // activeCount?: number;
 }) {
+    const router = useRouter();
     const [selectedId, setSelectedId] = useState(initialId || catatans[0]?.id);
     const [search, setSearch] = useState("");
     const [sortBy, setSortBy] = useState<SortOption>("semua");
+
+    useEffect(() => {
+        const onSync = () => router.refresh();
+        window.addEventListener("app:sync", onSync);
+        return () => window.removeEventListener("app:sync", onSync);
+    }, [router]);
 
     const filteredCatatans = useMemo(() => {
         let result = [...catatans];

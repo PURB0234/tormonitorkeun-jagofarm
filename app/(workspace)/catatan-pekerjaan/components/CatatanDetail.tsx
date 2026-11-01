@@ -42,11 +42,11 @@ export default function CatatanDetail({
             return;
         }
         setLoading(true);
-        const nextStatus = catatan.status === "selesai" ? "dikerjakan" : "selesai";
+        const nextStatus = catatan.status === "selesai" ? "terjadwal" : "selesai";
         const supabase = createClient();
 
         const { error } = await supabase
-            .from("catatan_pekerjaan")
+            .from("jadwal_kegiatan")
             .update({ status: nextStatus })
             .eq("id", catatan.id);
 
@@ -54,6 +54,9 @@ export default function CatatanDetail({
         if (error) {
             alert("Gagal update status: " + error.message);
         } else {
+            if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("app:sync"));
+            }
             router.refresh();
         }
     };
@@ -66,14 +69,19 @@ export default function CatatanDetail({
         if (!confirm(`Hapus catatan "${catatan.judul}"? Tindakan ini tidak bisa dibatalkan.`)) return;
         setLoading(true);
         const supabase = createClient();
+
         const { error } = await supabase
-            .from("catatan_pekerjaan")
+            .from("jadwal_kegiatan")
             .delete()
             .eq("id", catatan.id);
+
         setLoading(false);
         if (error) {
             alert("Gagal menghapus catatan: " + error.message);
         } else {
+            if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("app:sync"));
+            }
             router.push("/catatan-pekerjaan");
             router.refresh();
         }
@@ -167,7 +175,7 @@ export default function CatatanDetail({
                     </p>
                 </section>
 
-                {catatan.tautan_eksternal && (
+                {catatan.tautan_eksternal && !catatan.tautan_eksternal.startsWith("jadwal:") && (
                     <section className="space-y-2 pt-2 border-t border-gray-100">
                         <h3 className="font-bold text-gray-700 uppercase tracking-wider text-[11px]">Tautan</h3>
                         <a

@@ -42,10 +42,10 @@ export default function TopBar({ role }: { role?: UserRole }) {
 
         setSyncState("syncing");
 
-        // 1. Refresh Server Components (beranda & catatan-pekerjaan)
+        // 1. Refresh Server Components
         router.refresh();
 
-        // 2. Broadcast sinyal refresh ke Client Components (jadwal-tim, dll)
+        // 2. Broadcast sinyal refresh ke Client Components
         if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent("app:sync"));
         }
@@ -53,7 +53,7 @@ export default function TopBar({ role }: { role?: UserRole }) {
         setTimeout(() => {
             setSyncState("synced");
             setTimeout(() => setSyncState("idle"), 1500);
-        }, 600);
+        }, 500);
     };
 
     useEffect(() => {
@@ -90,28 +90,30 @@ export default function TopBar({ role }: { role?: UserRole }) {
         };
     }, []);
 
+    // Listener perubahan database jadwal & catatan (Auto-Sync)
     useEffect(() => {
         const supabase = createClient();
 
-        // Listener perubahan di database jadwal & catatan
+        const triggerRefresh = () => {
+            router.refresh();
+            if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("app:sync"));
+            }
+        };
+
         const globalChannel = supabase
-            .channel("global-db-changes")
+            .channel("global-db-sync")
             .on(
                 "postgres_changes",
                 { event: "*", schema: "public", table: "jadwal_kegiatan" },
-                () => handleSync()
-            )
-            .on(
-                "postgres_changes",
-                { event: "*", schema: "public", table: "catatan_pekerjaan" },
-                () => handleSync()
+                () => triggerRefresh()
             )
             .subscribe();
 
         return () => {
             supabase.removeChannel(globalChannel);
         };
-    }, []);
+    }, [router])
     // Maksimal 2 badge ditampilkan, sisanya masuk format +N
     const displayedUsers = onlineUsers.slice(0, 2);
     const remainingCount = onlineUsers.length - 2;
