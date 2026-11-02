@@ -117,19 +117,15 @@ Hanya ada 2 form modal yang bertindak sebagai orkestrator:
 
 ---
 
-## 7. Optimasi Ukuran Hosting & Produksi (Ultra-Lean Standalone)
+## 7. Optimasi Ukuran Hosting & Produksi (Clean Production Mode)
 
-- **Ukuran Runtime Produksi**: ~24.5 MB (Turun dari ~1 GB, reduksi 97.7%).
-- **`next.config.ts`**:
-  - `output: "standalone"`
-  - `images: { unoptimized: true }` (aplikasi memakai direct CDN/Supabase Storage URLs tanpa dependensi native image processing).
-- **`package.json`**:
-  - Script `postbuild` otomatis membersihkan binary native `@img` dan `sharp` (~11 MB) yang tidak digunakan dari folder `.next/standalone`.
-- **Struktur Deploy Ringan ke Hosting**:
-  1. `.next/standalone` (~23 MB)
-  2. `.next/static` (~1.4 MB) -> ditempatkan di `.next/standalone/.next/static`
-  3. `public` (~20 KB) -> ditempatkan di `.next/standalone/public`
-  Jalankan server via: `node server.js`.
+- **Mode Deployment**: Standard Next.js server (`next start`).
+- **Pembersihan Cache Otomatis**:
+  - `package.json` menjalankan `postbuild` untuk otomatis menghapus folder cache internal `.next/cache` pasca build, menghemat 200–400 MB storage server.
+- **Tailwind CSS v4 Integration**:
+  - Dikompilasi secara native oleh Next.js 16 tanpa loader tambahan di `next.config.ts`.
+- **Aset Statis**:
+  - File CSS chunks dan font disajikan langsung oleh Next.js via `/_next/static/` (HTTP 200) tanpa risiko konflik folder atau 404.
 
 ---
 
