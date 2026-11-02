@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/app/lib/supabase/client";
-import { Link2, Printer, Edit3, CheckCircle2, Clock, ExternalLink, Loader2, Trash2, Paperclip } from "lucide-react";
+import { Link2, Printer, Edit3, CheckCircle2, Clock, Calendar, ExternalLink, Loader2, Trash2, Paperclip } from "lucide-react";
 import type { Catatan } from "./CatatanList";
 import dynamic from "next/dynamic";
 
@@ -41,6 +41,17 @@ export default function CatatanDetail({
     const isAssignee = isTeam || (catatan.penanggung_jawab_id ? catatan.penanggung_jawab_id === currentUser.id : isNameMatch);
     const canUpdateStatus = isAdmin || isAssignee;
     const canDelete = isAdmin || isAssignee;
+
+    // Deteksi durasi multi-hari
+    const startStr = String(catatan.tanggal || catatan.created_at || "").slice(0, 10);
+    const endStr = catatan.tanggal_selesai ? String(catatan.tanggal_selesai).slice(0, 10) : startStr;
+    const isMultiDay = Boolean(startStr && endStr && endStr > startStr);
+    const diffDays = isMultiDay
+        ? Math.round(
+            (new Date(endStr + "T00:00:00").getTime() - new Date(startStr + "T00:00:00").getTime()) /
+            (1000 * 60 * 60 * 24)
+        ) + 1
+        : 1;
 
     const handleToggleStatus = async () => {
         if (!canUpdateStatus) {
@@ -171,6 +182,40 @@ export default function CatatanDetail({
                     <div>
                         <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Lokasi / Fasilitas</span>
                         <strong className="text-gray-900 block">{catatan.lokasi}</strong>
+                    </div>
+                </div>
+
+                {/* Karakter Waktu Pelaksanaan (Otomatis berdasarkan durasi) */}
+                <div className="grid grid-cols-2 gap-4 bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5 text-gray-700">
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                            {isMultiDay ? "Periode Pelaksanaan" : "Waktu Pelaksanaan"}
+                        </span>
+                        <div className="flex items-center gap-1.5 font-semibold text-gray-900">
+                            {isMultiDay ? (
+                                <>
+                                    <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                    <span>{startStr} s/d {endStr} ({diffDays} hari)</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Clock className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                                    <span>
+                                        {catatan.waktu_mulai ? catatan.waktu_mulai.slice(0, 5) : "08:00"} - {catatan.waktu_selesai ? catatan.waktu_selesai.slice(0, 5) : "10:00"} WIB
+                                    </span>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Karakter Tugas</span>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                            isMultiDay
+                                ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                : "bg-gray-100 text-gray-700 border border-gray-200"
+                        }`}>
+                            {isMultiDay ? "Multi-Hari (Siklus)" : "Jam Operasional"}
+                        </span>
                     </div>
                 </div>
 

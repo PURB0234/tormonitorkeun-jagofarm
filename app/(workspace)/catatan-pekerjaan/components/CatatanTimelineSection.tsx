@@ -5,6 +5,7 @@ import {
     ChevronLeft,
     ChevronRight,
     MapPin,
+    Calendar,
     Sprout,
     Droplets,
     Loader2,
@@ -393,6 +394,7 @@ export default function CatatanTimelineSection({
             return {
                 hari: HARI_NAMES[i],
                 tanggal: dateObj.getDate(),
+                bulanShort: BULAN_NAMES[dateObj.getMonth()].slice(0, 3),
                 bulanTahun: BULAN_NAMES[dateObj.getMonth()].slice(0, 3) + " " + dateObj.getFullYear(),
                 iso: isoString,
                 isToday: isoString === todayStr,
@@ -582,7 +584,38 @@ export default function CatatanTimelineSection({
                     weekDays={weekDays}
                     jadwals={jadwals}
                     filterStatus={filterStatus}
+                    onFilterStatusChange={setFilterStatus}
                     selectedStaff={selectedStaff}
+                    onSelectedStaffChange={setSelectedStaff}
+                    staffList={staffList}
+                    activeMonths={activeMonths}
+                    selectedMonthKey={selectedMonthKey}
+                    onSelectMonth={(val, date) => {
+                        setSelectedMonthKey(val);
+                        if (val) {
+                            setSelectedCompletedMonthKey("");
+                            if (date) {
+                                setAnchorDate(new Date(date.getTime()));
+                            } else {
+                                const target = activeMonths.find((m) => m.key === val);
+                                if (target) setAnchorDate(new Date(target.date.getTime()));
+                            }
+                        }
+                    }}
+                    completedMonths={completedMonths}
+                    selectedCompletedMonthKey={selectedCompletedMonthKey}
+                    onSelectCompletedMonth={(val, date) => {
+                        setSelectedCompletedMonthKey(val);
+                        if (val) {
+                            setSelectedMonthKey("");
+                            if (date) {
+                                setAnchorDate(new Date(date.getTime()));
+                            } else {
+                                const target = completedMonths.find((m) => m.key === val);
+                                if (target) setAnchorDate(new Date(target.date.getTime()));
+                            }
+                        }
+                    }}
                     anchorDate={anchorDate}
                     onSelectTask={onSelectTask}
                     getDotColor={getDotColor}
@@ -640,8 +673,9 @@ export default function CatatanTimelineSection({
                                                 <span className="text-[10px] font-semibold text-gray-500 tracking-wider uppercase block">
                                                     {day.hari}
                                                 </span>
-                                                <span className="text-sm font-bold text-gray-900 mt-0.5 block">
-                                                    {day.tanggal}
+                                                <span className="text-sm font-bold text-gray-900 mt-0.5 flex items-baseline gap-1">
+                                                    <span>{day.tanggal}</span>
+                                                    <span className="text-[11px] font-medium text-gray-500">{day.bulanShort}</span>
                                                 </span>
                                             </div>
 
@@ -669,6 +703,18 @@ export default function CatatanTimelineSection({
                                                         const isPanen = t.tag?.toUpperCase() === "PANEN";
                                                         const isTim = t.tag?.toLowerCase().includes("tim");
                                                         const isSelesai = t.status === "selesai";
+
+                                                        // Deteksi apakah agenda ini berlangsung multi-hari
+                                                        const startStr = String(t.tanggal || "").slice(0, 10);
+                                                        const endStr = t.tanggal_selesai ? String(t.tanggal_selesai).slice(0, 10) : startStr;
+                                                        const isMultiDay = Boolean(startStr && endStr && endStr > startStr);
+                                                        const multiDaysCount = isMultiDay
+                                                            ? Math.round(
+                                                                (new Date(endStr + "T00:00:00").getTime() -
+                                                                    new Date(startStr + "T00:00:00").getTime()) /
+                                                                (1000 * 60 * 60 * 24)
+                                                            ) + 1
+                                                            : 1;
 
                                                         return (
                                                             <div
@@ -715,9 +761,16 @@ export default function CatatanTimelineSection({
                                                                 }
                                                             >
                                                                 <div className="flex items-center justify-between gap-1">
-                                                                    <span className="text-[10px] font-medium text-gray-500">
-                                                                        {formatTime(t.waktu_mulai)} - {formatTime(t.waktu_selesai)}
-                                                                    </span>
+                                                                    {isMultiDay ? (
+                                                                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                                                            <Calendar className="w-2.5 h-2.5 shrink-0" />
+                                                                            <span>{multiDaysCount} hari</span>
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-[10px] font-medium text-gray-500">
+                                                                            {formatTime(t.waktu_mulai)} - {formatTime(t.waktu_selesai)}
+                                                                        </span>
+                                                                    )}
 
                                                                     {t.status === "perlu_update" && (
                                                                         <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200 animate-pulse">

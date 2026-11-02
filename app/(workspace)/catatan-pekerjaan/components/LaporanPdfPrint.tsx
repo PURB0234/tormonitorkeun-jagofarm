@@ -97,14 +97,25 @@ export default function LaporanPdfPrint({
                                 </td>
                             </tr>
                         ) : (
-                            sortedJadwals.map((item, idx) => (
+                            sortedJadwals.map((item, idx) => {
+                                const startStr = String(item.tanggal || "").slice(0, 10);
+                                const endStr = item.tanggal_selesai ? String(item.tanggal_selesai).slice(0, 10) : startStr;
+                                const isMultiDay = Boolean(startStr && endStr && endStr > startStr);
+                                const diffDays = isMultiDay
+                                    ? Math.round(
+                                        (new Date(endStr + "T00:00:00").getTime() - new Date(startStr + "T00:00:00").getTime()) /
+                                        (1000 * 60 * 60 * 24)
+                                    ) + 1
+                                    : 1;
+
+                                return (
                                 <tr key={item.id} className="border-b border-gray-400">
                                     <td className="p-2 border border-black text-center font-medium">{idx + 1}</td>
                                     <td className="p-2 border border-black font-semibold whitespace-nowrap">
-                                        {item.tanggal}
+                                        {isMultiDay ? startStr + " s/d " + endStr : item.tanggal}
                                     </td>
                                     <td className="p-2 border border-black whitespace-nowrap">
-                                        {item.waktu_mulai.slice(0, 5)} - {item.waktu_selesai.slice(0, 5)}
+                                        {isMultiDay ? diffDays + " hari (Siklus)" : item.waktu_mulai.slice(0, 5) + " - " + item.waktu_selesai.slice(0, 5)}
                                     </td>
                                     <td className="p-2 border border-black">
                                         <div className="font-bold text-black">{item.nama_kegiatan}</div>
@@ -125,7 +136,8 @@ export default function LaporanPdfPrint({
                                         {item.status === "selesai" ? "SELESAI" : "TERJADWAL"}
                                     </td>
                                 </tr>
-                            ))
+                                );
+                            })
                         )}
                     </tbody>
                 </table>

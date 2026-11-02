@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/app/lib/supabase/client";
-import { MapPin, Paperclip, ExternalLink, Image as ImageIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { MapPin, Paperclip, ExternalLink, Image as ImageIcon, ChevronLeft, ChevronRight, Calendar, Clock } from "lucide-react";
 
 export type Catatan = {
     id: string;
@@ -155,6 +155,16 @@ export default function CatatanList({
             ) : (
                 paginatedCatatans.map((item) => {
                     const isActive = item.id === activeId;
+                    const startStr = String(item.tanggal || item.created_at || "").slice(0, 10);
+                    const endStr = item.tanggal_selesai ? String(item.tanggal_selesai).slice(0, 10) : startStr;
+                    const isMultiDay = Boolean(startStr && endStr && endStr > startStr);
+                    const multiDaysCount = isMultiDay
+                        ? Math.round(
+                            (new Date(endStr + "T00:00:00").getTime() - new Date(startStr + "T00:00:00").getTime()) /
+                            (1000 * 60 * 60 * 24)
+                        ) + 1
+                        : 1;
+
                     return (
                         <div
                             key={item.id}
@@ -200,6 +210,18 @@ export default function CatatanList({
                                 <h2 className="font-bold text-gray-900 text-sm">{item.judul}</h2>
                                 <p className="text-xs text-gray-600 line-clamp-2">{item.deskripsi}</p>
                                 <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-gray-200 text-[11px]">
+                                    {isMultiDay ? (
+                                        <span className="inline-flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[10px]">
+                                            <Calendar className="w-3 h-3 text-emerald-600 shrink-0" />
+                                            <span>{multiDaysCount} hari ({startStr.slice(5)} - {endStr.slice(5)})</span>
+                                        </span>
+                                    ) : item.waktu_mulai ? (
+                                        <span className="inline-flex items-center gap-1 text-gray-500 font-medium">
+                                            <Clock className="w-3 h-3 text-gray-400 shrink-0" />
+                                            <span>{item.waktu_mulai.slice(0, 5)} - {item.waktu_selesai ? item.waktu_selesai.slice(0, 5) : "10:00"}</span>
+                                        </span>
+                                    ) : null}
+
                                     {item.lokasi && (
                                         <span className="inline-flex items-center gap-1 text-gray-500 font-medium">
                                             <MapPin className="w-3 h-3 text-gray-400 shrink-0" /> {item.lokasi}
