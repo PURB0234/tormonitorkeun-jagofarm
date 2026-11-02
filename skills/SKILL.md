@@ -123,7 +123,7 @@ Hanya ada 2 form modal yang bertindak sebagai orkestrator:
 - **Pembersihan Cache Otomatis**:
   - `package.json` menjalankan `postbuild` untuk otomatis menghapus folder cache internal `.next/cache` pasca build, menghemat 200–400 MB storage server.
 - **Tailwind CSS v4 Integration**:
-  - Dikompilasi secara native oleh Next.js 16 tanpa loader tambahan di `next.config.ts`.
+  - Menggunakan plugin resmi `@tailwindcss/postcss` dengan `postcss.config.mjs`. Seluruh class utilitas Tailwind dikompilasi sempurna ke file CSS produksi (64 KB).
 - **Aset Statis**:
   - File CSS chunks dan font disajikan langsung oleh Next.js via `/_next/static/` (HTTP 200) tanpa risiko konflik folder atau 404.
 
