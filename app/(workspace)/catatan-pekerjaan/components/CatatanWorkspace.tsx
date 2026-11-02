@@ -6,17 +6,18 @@ import {
     FileText,
     Calendar,
     BarChart3,
-    Plus,
     Printer,
 } from "lucide-react";
-import CatatanList, { Catatan } from "./CatatanList";
-import CatatanDetail from "./CatatanDetail";
-import CatatanHeader, { SortOption } from "./CatatanHeader";
+import CatatanList from "./feed/CatatanList";
+import CatatanDetail from "./feed/CatatanDetail";
+import CatatanHeader from "./feed/CatatanHeader";
 import CatatanTimelineSection from "./CatatanTimelineSection";
 import ModalTambahKegiatan from "@/app/components/modal/ModalTambahKegiatan";
 import ModalEditKegiatan from "@/app/components/modal/ModalEditKegiatan";
+import type { Catatan, JadwalRow } from "@/types/kegiatan";
+import type { ViewMode, SortOption } from "@/types/common";
 
-export type ViewMode = "catatan" | "kalender" | "gantt";
+export type { ViewMode };
 
 export default function CatatanWorkspace({
     catatans,
@@ -38,7 +39,7 @@ export default function CatatanWorkspace({
     // Modal States
     const [isTambahModalOpen, setIsTambahModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-    const [selectedTaskToEdit, setSelectedTaskToEdit] = useState<any | null>(null);
+    const [selectedTaskToEdit, setSelectedTaskToEdit] = useState<JadwalRow | null>(null);
 
     useEffect(() => {
         const onSync = () => router.refresh();

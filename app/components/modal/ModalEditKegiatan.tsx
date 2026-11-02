@@ -4,26 +4,47 @@ import { useState, useEffect } from "react";
 import {
     X,
     FileText,
-    Calendar,
     MapPin,
-    UploadCloud,
-    Image as ImageIcon,
     Link2,
     BookmarkCheck,
     ChevronDown,
-    Check,
     Loader2,
     Trash2,
 } from "lucide-react";
 import { createClient } from "@/app/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { DAFTAR_LOKASI } from "@/app/lib/constants";
+import MemberPicker from "./parts/MemberPicker";
+import DateRangePicker from "./parts/DateRangePicker";
+import FileUploader from "./parts/FileUploader";
+
+export type EditableKegiatan = {
+    id: string;
+    nama_kegiatan?: string;
+    judul?: string;
+    catatan?: string | null;
+    deskripsi?: string | null;
+    penanggung_jawab_id?: string | null;
+    penanggung_jawab_nama?: string;
+    penanggung_jawab?: string;
+    tanggal?: string | null;
+    tanggal_selesai?: string | null;
+    waktu_mulai?: string | null;
+    waktu_selesai?: string | null;
+    lokasi?: string | null;
+    tag?: string | null;
+    status?: string | null;
+    lampiran_url?: string | null;
+    lampiran_nama?: string | null;
+    tautan_eksternal?: string | null;
+    created_at?: string;
+};
 
 type ModalEditProps = {
     isOpen: boolean;
     onClose: () => void;
-    jadwal?: any | null;
-    catatan?: any | null;
+    jadwal?: EditableKegiatan | null;
+    catatan?: EditableKegiatan | null;
     currentUser?: { id: string; role: string; name: string };
     onDelete?: () => void;
     onSuccess?: (targetDate?: string) => void;
@@ -70,6 +91,11 @@ export default function ModalEditKegiatan({
     const canDelete = Boolean(isAdmin || onDelete || true);
 
     const toggleMember = (id: string) => {
+        if (isAllTeam) {
+            setIsAllTeam(false);
+            setSelectedMemberIds([id]);
+            return;
+        }
         setSelectedMemberIds((prev) => {
             const next = prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id];
             setIsAllTeam(members.length > 0 && next.length === members.length);
@@ -92,7 +118,34 @@ export default function ModalEditKegiatan({
 
         const supabase = createClient();
         supabase.from("profiles").select("id, full_name, email").then(({ data }) => {
-            if (data && data.length > 0) setMembers(data);
+            const mems = data || [];
+            if (mems.length > 0) setMembers(mems);
+
+            const pj = (activeItem.penanggung_jawab_nama || activeItem.penanggung_jawab || "").toLowerCase();
+            const initialTag = activeItem.tag || "";
+            const isTeam = pj.includes("seluruh tim") || (initialTag && initialTag.toLowerCase().includes("tim"));
+
+            if (isTeam) {
+                setIsAllTeam(true);
+                setSelectedMemberIds(mems.map((m) => m.id));
+            } else {
+                setIsAllTeam(false);
+                const matched = mems
+                    .filter((m) => {
+                        const name = (m.full_name || m.email?.split("@")[0] || "").toLowerCase();
+                        const first = name.split(" ")[0];
+                        return pj.includes(first) || (activeItem.penanggung_jawab_id && m.id === activeItem.penanggung_jawab_id);
+                    })
+                    .map((m) => m.id);
+
+                if (matched.length > 0) {
+                    setSelectedMemberIds(matched);
+                } else if (activeItem.penanggung_jawab_id) {
+                    setSelectedMemberIds([activeItem.penanggung_jawab_id]);
+                } else {
+                    setSelectedMemberIds([]);
+                }
+            }
         });
 
         const initialNama = activeItem.nama_kegiatan || activeItem.judul || "";
@@ -119,36 +172,7 @@ export default function ModalEditKegiatan({
         setCurrentLampiranUrl(activeItem.lampiran_url || null);
         setCurrentLampiranNama(activeItem.lampiran_nama || null);
         setFile(null);
-
-        const pj = (activeItem.penanggung_jawab_nama || activeItem.penanggung_jawab || "").toLowerCase();
-        if (pj.includes("seluruh tim") || (initialTag && initialTag.toLowerCase().includes("tim"))) {
-            setIsAllTeam(true);
-        } else {
-            setIsAllTeam(false);
-        }
     }, [isOpen, activeItem]);
-
-    useEffect(() => {
-        if (!activeItem || members.length === 0) return;
-        if (isAllTeam) {
-            setSelectedMemberIds(members.map((m) => m.id));
-        } else {
-            const pj = (activeItem.penanggung_jawab_nama || activeItem.penanggung_jawab || "").toLowerCase();
-            const matchedIds = members
-                .filter((m) => {
-                    const name = (m.full_name || m.name || m.email?.split("@")[0] || "").toLowerCase();
-                    const first = name.split(" ")[0];
-                    return pj.includes(first) || (activeItem.penanggung_jawab_id && m.id === activeItem.penanggung_jawab_id);
-                })
-                .map((m) => m.id);
-
-            if (matchedIds.length > 0) {
-                setSelectedMemberIds(matchedIds);
-            } else if (activeItem.penanggung_jawab_id) {
-                setSelectedMemberIds([activeItem.penanggung_jawab_id]);
-            }
-        }
-    }, [members, isAllTeam, activeItem]);
 
     if (!isOpen || !activeItem) return null;
 
@@ -179,24 +203,31 @@ export default function ModalEditKegiatan({
             }
         }
 
-        // 2. Format PJ
+        // 2. Format PJ & Tag
         let pjNama = "";
-        let finalTag = tag || null;
+        let finalTag: string | null = tag || null;
 
         if (isAllTeam || (members.length > 0 && selectedMemberIds.length === members.length)) {
             pjNama = "Seluruh Tim (" + members.length + ")";
             finalTag = "Seluruh Tim (" + members.length + ")";
-        } else if (selectedMemberIds.length > 0) {
-            const selectedNames = members
-                .filter((m) => selectedMemberIds.includes(m.id))
-                .map((m) => {
-                    const full = m.full_name || m.name || m.email?.split("@")[0] || "Anggota";
-                    const parts = full.trim().split(" ");
-                    return parts.length > 1 ? parts[0] + " " + parts[1][0] + "." : parts[0];
-                });
-            pjNama = selectedNames.join(" & ");
         } else {
-            pjNama = activeItem.penanggung_jawab_nama || activeItem.penanggung_jawab || "Staf Lapangan";
+            // Jika bukan seluruh tim, buang tag "Seluruh Tim"
+            if (finalTag && finalTag.toLowerCase().includes("tim")) {
+                finalTag = null;
+            }
+
+            if (selectedMemberIds.length > 0) {
+                const selectedNames = members
+                    .filter((m) => selectedMemberIds.includes(m.id))
+                    .map((m) => {
+                        const full = m.full_name || m.name || m.email?.split("@")[0] || "Anggota";
+                        const parts = full.trim().split(" ");
+                        return parts.length > 1 ? parts[0] + " " + parts[1][0] + "." : parts[0];
+                    });
+                pjNama = selectedNames.join(" & ");
+            } else {
+                pjNama = activeItem.penanggung_jawab_nama || activeItem.penanggung_jawab || "Staf Lapangan";
+            }
         }
 
         const isValidUUID = (id: string | null) =>
@@ -311,147 +342,54 @@ export default function ModalEditKegiatan({
                     </div>
 
                     {/* Penanggung Jawab */}
+                    <MemberPicker
+                        members={members}
+                        selectedMemberIds={selectedMemberIds}
+                        isAllTeam={isAllTeam}
+                        onToggleMember={toggleMember}
+                        onToggleAllTeam={toggleAllTeam}
+                    />
+
+                    {/* Rentang Tanggal & Waktu Pelaksanaan */}
+                    <DateRangePicker
+                        tanggal={tanggal}
+                        setTanggal={setTanggal}
+                        tanggalSelesai={tanggalSelesai}
+                        setTanggalSelesai={setTanggalSelesai}
+                        waktuMulai={waktuMulai}
+                        setWaktuMulai={setWaktuMulai}
+                        waktuSelesai={waktuSelesai}
+                        setWaktuSelesai={setWaktuSelesai}
+                        minDate={tanggal && tanggal < minMonthStart ? tanggal : minMonthStart}
+                    />
+
+                    {/* Lokasi */}
                     <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                            <label className="font-bold text-gray-800">
-                                Penanggung Jawab <span className="text-red-500">*</span>
-                            </label>
-                            <span className="text-[11px] text-gray-500">
-                                {selectedMemberIds.length} dipilih
-                            </span>
-                        </div>
-
-                        <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 border border-gray-200 rounded-lg">
-                            <button
-                                type="button"
-                                onClick={toggleAllTeam}
-                                className={
-                                    "px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer " +
-                                    (isAllTeam
-                                        ? "bg-[#1E5E35] text-white"
-                                        : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100")
-                                }
+                        <label className="block font-bold text-gray-800 mb-1.5">
+                            Lokasi / Fasilitas Operasional <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                            <MapPin className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                            <select
+                                value={lokasi}
+                                onChange={(e) => setLokasi(e.target.value)}
+                                required
+                                className="w-full appearance-none pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-xs bg-white text-gray-900 outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600 cursor-pointer"
                             >
-                                Seluruh Tim
-                            </button>
-
-                            {members.map((m) => {
-                                const isSelected = selectedMemberIds.includes(m.id);
-                                const name = m.name || m.full_name || m.email?.split("@")[0] || "Anggota";
-                                return (
-                                    <button
-                                        key={m.id}
-                                        type="button"
-                                        onClick={() => toggleMember(m.id)}
-                                        className={
-                                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer " +
-                                            (isSelected
-                                                ? "bg-[#1E5E35] text-white"
-                                                : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100")
-                                        }
-                                    >
-                                        {isSelected && <Check className="w-3 h-3" />}
-                                        <span>{name}</span>
-                                    </button>
-                                );
-                            })}
+                                {DAFTAR_LOKASI.map((loc) => (
+                                    <option key={loc} value={loc}>
+                                        {loc}
+                                    </option>
+                                ))}
+                                {lokasi && !(DAFTAR_LOKASI as readonly string[]).includes(lokasi) && (
+                                    <option value={lokasi}>{lokasi}</option>
+                                )}
+                            </select>
+                            <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                         </div>
                     </div>
 
-                    {/* Rentang Tanggal Pelaksanaan */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                            <label className="block font-bold text-gray-800 mb-1.5">
-                                Dari Tanggal <span className="text-red-500">*</span>
-                            </label>
-                            <div className="relative">
-                                <Calendar className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                <input
-                                    type="date"
-                                    required
-                                    min={tanggal && tanggal < minMonthStart ? tanggal : minMonthStart}
-                                    value={tanggal}
-                                    onChange={(e) => {
-                                        const val = e.target.value;
-                                        setTanggal(val);
-                                        if (tanggalSelesai < val) setTanggalSelesai(val);
-                                    }}
-                                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600"
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block font-bold text-gray-800 mb-1.5">
-                                Sampai Tanggal <span className="text-red-500">*</span>
-                            </label>
-                            <div className="relative">
-                                <Calendar className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                <input
-                                    type="date"
-                                    required
-                                    min={tanggal}
-                                    value={tanggalSelesai}
-                                    onChange={(e) => setTanggalSelesai(e.target.value)}
-                                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Waktu Pelaksanaan & Lokasi */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                            <label className="block font-bold text-gray-800 mb-1.5">
-                                Waktu Pelaksanaan (Mulai - Selesai) <span className="text-red-500">*</span>
-                            </label>
-                            <div className="flex items-center gap-1.5">
-                                <input
-                                    type="time"
-                                    required
-                                    value={waktuMulai}
-                                    onChange={(e) => setWaktuMulai(e.target.value)}
-                                    className="w-full px-2 py-2 border border-gray-300 rounded-lg text-xs text-center outline-hidden focus:border-green-600"
-                                />
-                                <span className="text-gray-400 text-[11px] font-medium shrink-0">s/d</span>
-                                <input
-                                    type="time"
-                                    required
-                                    value={waktuSelesai}
-                                    onChange={(e) => setWaktuSelesai(e.target.value)}
-                                    className="w-full px-2 py-2 border border-gray-300 rounded-lg text-xs text-center outline-hidden focus:border-green-600"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Lokasi */}
-                        <div>
-                            <label className="block font-bold text-gray-800 mb-1.5">
-                                Lokasi / Fasilitas Operasional <span className="text-red-500">*</span>
-                            </label>
-                            <div className="relative">
-                                <MapPin className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                                <select
-                                    value={lokasi}
-                                    onChange={(e) => setLokasi(e.target.value)}
-                                    required
-                                    className="w-full appearance-none pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-xs bg-white text-gray-900 outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600 cursor-pointer"
-                                >
-                                    {DAFTAR_LOKASI.map((loc) => (
-                                        <option key={loc} value={loc}>
-                                            {loc}
-                                        </option>
-                                    ))}
-                                    {lokasi && !(DAFTAR_LOKASI as readonly string[]).includes(lokasi) && (
-                                        <option value={lokasi}>{lokasi}</option>
-                                    )}
-                                </select>
-                                <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Deskripsi & Catatan */}
+                    {/* Deskripsi & Log Detail */}
                     <div>
                         <label className="block font-bold text-gray-800 mb-1.5">
                             Deskripsi / Log Detail Pekerjaan <span className="text-red-500">*</span>
@@ -465,59 +403,19 @@ export default function ModalEditKegiatan({
                         />
                     </div>
 
-                    {/* Upload Berkas / Dokumentasi */}
-                    <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                            <label className="font-bold text-gray-800">
-                                Bukti Foto & Lampiran <span className="text-gray-400 font-normal">(Opsional)</span>
-                            </label>
-                            <span className="text-[11px] text-gray-400 font-mono">Maks. 25MB</span>
-                        </div>
-                        <input
-                            type="file"
-                            id="file-edit-kegiatan"
-                            className="hidden"
-                            accept="image/*,.pdf,.csv"
-                            onChange={(e) => setFile(e.target.files?.[0] || null)}
-                        />
-                        {!file && !currentLampiranUrl ? (
-                            <label
-                                htmlFor="file-edit-kegiatan"
-                                className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center bg-gray-50/50 hover:bg-gray-50 cursor-pointer transition-colors block"
-                            >
-                                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-1">
-                                    <UploadCloud className="w-4 h-4" />
-                                </div>
-                                <p className="font-semibold text-gray-800 text-xs">Pilih berkas foto atau dokumen bukti</p>
-                                <p className="text-[10px] text-gray-400 mt-0.5">Format JPG, PNG, PDF, atau CSV</p>
-                            </label>
-                        ) : (
-                            <div className="flex items-center justify-between p-3 bg-blue-50/40 border border-blue-200 rounded-xl">
-                                <div className="flex items-center gap-2.5 overflow-hidden">
-                                    <ImageIcon className="w-5 h-5 text-blue-600 shrink-0" />
-                                    <div className="truncate">
-                                        <p className="font-bold text-gray-800 truncate text-xs">
-                                            {file ? file.name : currentLampiranNama || "Berkas Terlampir"}
-                                        </p>
-                                        <p className="text-[10px] text-gray-400">
-                                            {file ? (file.size / 1024).toFixed(0) + " KB • Siap diunggah" : "Tersimpan di server"}
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setFile(null);
-                                        setCurrentLampiranUrl(null);
-                                        setCurrentLampiranNama(null);
-                                    }}
-                                    className="p-1 text-gray-400 hover:text-red-600 rounded-md transition"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                    {/* Upload Bukti / Lampiran */}
+                    <FileUploader
+                        file={file}
+                        setFile={setFile}
+                        inputId="file-edit-kegiatan"
+                        existingFileUrl={currentLampiranUrl}
+                        existingFileName={currentLampiranNama}
+                        onRemoveExisting={() => {
+                            setFile(null);
+                            setCurrentLampiranUrl(null);
+                            setCurrentLampiranNama(null);
+                        }}
+                    />
 
                     {/* Tautan */}
                     <div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { JadwalRow } from "./GanttChartTim";
+import type { JadwalRow } from "@/types/kegiatan";
 
 type LaporanPdfPrintProps = {
     jadwals: JadwalRow[];

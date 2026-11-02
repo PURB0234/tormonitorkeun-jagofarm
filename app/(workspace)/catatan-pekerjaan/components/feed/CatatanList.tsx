@@ -3,25 +3,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/app/lib/supabase/client";
 import { MapPin, Paperclip, ExternalLink, Image as ImageIcon, ChevronLeft, ChevronRight, Calendar, Clock } from "lucide-react";
+import type { Catatan } from "@/types/kegiatan";
+import { getDurationInfo } from "@/lib/utils/duration";
 
-export type Catatan = {
-    id: string;
-    created_at: string;
-    judul: string;
-    penanggung_jawab: string;
-    penanggung_jawab_id?: string | null;
-    status: "dikerjakan" | "selesai";
-    lokasi: string;
-    deskripsi: string;
-    tautan_eksternal?: string | null;
-    lampiran_url?: string | null;
-    lampiran_nama?: string | null;
-    tag?: string | null;
-    tanggal?: string | null;
-    tanggal_selesai?: string | null;
-    waktu_mulai?: string | null;
-    waktu_selesai?: string | null;
-};
+export type { Catatan };
 
 export default function CatatanList({
     catatans,
@@ -155,15 +140,10 @@ export default function CatatanList({
             ) : (
                 paginatedCatatans.map((item) => {
                     const isActive = item.id === activeId;
-                    const startStr = String(item.tanggal || item.created_at || "").slice(0, 10);
-                    const endStr = item.tanggal_selesai ? String(item.tanggal_selesai).slice(0, 10) : startStr;
-                    const isMultiDay = Boolean(startStr && endStr && endStr > startStr);
-                    const multiDaysCount = isMultiDay
-                        ? Math.round(
-                            (new Date(endStr + "T00:00:00").getTime() - new Date(startStr + "T00:00:00").getTime()) /
-                            (1000 * 60 * 60 * 24)
-                        ) + 1
-                        : 1;
+                    const { startStr, endStr, isMultiDay, daysCount } = getDurationInfo(
+                        item.tanggal || item.created_at,
+                        item.tanggal_selesai
+                    );
 
                     return (
                         <div
@@ -213,7 +193,7 @@ export default function CatatanList({
                                     {isMultiDay ? (
                                         <span className="inline-flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[10px]">
                                             <Calendar className="w-3 h-3 text-emerald-600 shrink-0" />
-                                            <span>{multiDaysCount} hari ({startStr.slice(5)} - {endStr.slice(5)})</span>
+                                            <span>{daysCount} hari ({startStr.slice(5)} - {endStr.slice(5)})</span>
                                         </span>
                                     ) : item.waktu_mulai ? (
                                         <span className="inline-flex items-center gap-1 text-gray-500 font-medium">

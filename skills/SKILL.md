@@ -50,50 +50,70 @@ Aplikasi mengadopsi prinsip **Single Source of Truth**:
 
 ---
 
-## 3. Struktur Frontend & Workspace Terpadu
+## 3. Struktur Direktori Modular & Arsitektur Terpadu
 
-Halaman utama operasional disatukan di **`/catatan-pekerjaan`** (`app/(workspace)/catatan-pekerjaan/`):
-URL legacy `/jadwal-tim` dialihkan otomatis via server redirect `app/(workspace)/jadwal-tim/page.tsx` ke `/catatan-pekerjaan?view=kalender`.
+Proyek distrukturkan dengan pemisahan domain yang ketat agar bersih, mudah dibaca, dan modular:
 
-### Komponen Inti:
-1. **`CatatanWorkspace.tsx`**:
-   Induk workspace pengelola switcher 3 tampilan, state pencarian, filter sorting, dan integrasi modal universal.
-2. **Mode 1 — Daftar Catatan (`CatatanList.tsx` & `CatatanDetail.tsx`)**:
-   - Layout feed 2 kolom (List di kiri, detail preview dokumen/foto di kanan).
-   - Filter tab: "Semua" dan "Tugas Saya".
-   - Fitur "Seluruh Tim" otomatis tampil di tab "Tugas Saya" seluruh pengguna.
-3. **Mode 2 — Kalender Mingguan (`CatatanTimelineSection.tsx`)**:
-   - Grid 7 hari per minggu dengan navigasi tanggal `prevWeek` / `nextWeek`.
-   - Filter petugas (chips) & filter dropdown bulan beragenda.
-   - Drag-and-Drop kontekstual 3 zona (Poka-Yoke):
-     - Normal: *Selesai / Done* dan *Hapus*.
-     - Berstatus `perlu_update`: *Update Catatan*, *Done + Update*, dan *Hapus*.
-     - Berstatus `selesai`: *Kembalikan ke Dikerjakan* (dua arah) dan *Hapus*.
-4. **Mode 3 — Timeline Gantt Chart (`GanttChartTim.tsx`)**:
-   - Split view: Metadata kiri (`Nama Kegiatan | PIC | Status`) dan grid timeline kanan.
-   - Kolom metadata dilengkapi draggable vertical resizer handle (lebar dinamis 260px–650px).
-   - Tombol Zoom level sumbu Z (Out, %, In, Reset ke 100%).
-   - Drag-pan sumbu X & Y dengan proteksi klik kiri (`e.button === 0`).
-   - Mode Layar Penuh (Fullscreen toggle) dengan tombol `Esc` dan body-scroll lock untuk mencegah scroll trap.
-   - Kolom tanggal header terkunci di atas (`sticky top-0 z-30`).
-   - Isolasi scroll dengan CSS `overscroll-contain`.
-5. **Cetak Laporan PDF (`LaporanPdfPrint.tsx`)**:
-   Layout format cetak resmi landscape via `@media print`.
+```text
+app/
+├── (auth)/                    # Autentikasi (login, register)
+├── (workspace)/               # Workspace terproteksi
+│   ├── beranda/               # Dashboard ringkasan eksekutif
+│   ├── admin/                 # Manajemen profil & peran tim
+│   ├── catatan-pekerjaan/     # Workspace terpadu 3-in-1 operasional
+│   │   ├── components/
+│   │   │   ├── feed/          # CatatanList, CatatanDetail, CatatanHeader
+│   │   │   ├── kalender/      # KalenderSection, KalenderNav, KalenderGrid, KalenderCard, KalenderDropZones
+│   │   │   ├── gantt/         # GanttChartTim, GanttToolbar, GanttGrid, GanttTaskBar, GanttMetadataCol
+│   │   │   ├── filter/        # TimelineFilterBar (Komponen filter bersama)
+│   │   │   └── print/         # LaporanPdfPrint (Cetak dokumen A4)
+│   │   └── page.tsx           # Server component / loader data
+│   └── jadwal-tim/            # Legacy redirect ke /catatan-pekerjaan?view=kalender
+├── components/
+│   ├── layout/                # AppShell, TopBar, MainContent
+│   ├── modal/                 # ModalTambahKegiatan, ModalEditKegiatan
+│   │   └── parts/             # MemberPicker, DateRangePicker, FileUploader
+│   └── ui/                    # Primitif UI atomik (Button, Card, Select, Badge, SegmentedControl)
+├── auth/callback/route.ts     # Supabase OAuth/Magiclink exchange code endpoint
+hooks/                         # useCalendarDragDrop, useGanttResize, useGanttInteraction
+lib/utils/                     # date.ts, duration.ts, colors.ts
+types/                         # kegiatan.ts, common.ts
+skills/                        # SKILL.md (Dokumentasi sistem AI Agent)
+```
 
 ---
 
-## 4. Sistem Modal Universal
+## 4. Komponen Filter Terpadu (Shared Filtering Component)
 
-Hanya ada 2 komponen modal untuk seluruh kebutuhan input data:
-1. **`app/components/modal/ModalTambahKegiatan.tsx`**:
-   Modal universal untuk tambah agenda/catatan baru.
-2. **`app/components/modal/ModalEditKegiatan.tsx`**:
-   Modal universal untuk edit agenda/catatan eksisting.
+**`TimelineFilterBar.tsx`** (`components/filter/TimelineFilterBar.tsx`):
+- Digunakan bersama oleh **Kalender Mingguan**, **Gantt Chart (Mode Biasa)**, dan **Gantt Chart (Mode Layar Penuh)**.
+- Menghilangkan duplikasi kode filter dan mencegah inkonsistensi state antar-tampilan.
+- Fitur Filter:
+  1. **Segmented Control Status**: Diagendakan (Aktif) / Telah Dilaksanakan / Semua.
+  2. **Filter Petugas**: Chips interaktif atau Dropdown Select dengan dukungan nama multi-anggota & Seluruh Tim.
+  3. **Filter Bulan Beragenda & Telah Dilaksanakan**: Menavigasi anchorDate ke bulan bersangkutan tanpa merusak filter status.
 
-### Aturan Form Modal:
-- Status pekerjaan tidak diubah manual lewat radio button modal (status dikendalikan via aksi tombol atau drag-and-drop).
-- Validasi tanggal dikunci minimal bulan berjalan (`min={minMonthStart}`). Untuk edit data riwayat lama, gunakan `min={tanggal && tanggal < minMonthStart ? tanggal : minMonthStart}` agar browser tidak memblokir simpan.
-- Pilihan "Seluruh Tim" otomatis menandai seluruh ID anggota aktif dan menyetel tag `'Seluruh Tim (N)'`.
+---
+
+## 5. UI Primitives (`app/components/ui/`)
+
+Komponen dasar UI konsisten tanpa dependensi berlebih:
+1. **`Button.tsx`**: Varian `primary`, `secondary`, `outline`, `dark`, `danger`, `ghost`, `sync`, `nav`, `addNote`.
+2. **`Card.tsx`**: Kontainer kartu bertepi halus dengan shadow minimalis.
+3. **`Select.tsx`**: Dropdown select terstandardisasi dengan ikon ChevronDown.
+4. **`Badge.tsx`**: Chip status dengan varian `success`, `warning`, `info`, `danger`, `neutral`.
+5. **`SegmentedControl.tsx`**: Pengalih tab status berbasis pill yang responsif.
+
+---
+
+## 6. Sistem Modal Universal
+
+Hanya ada 2 form modal yang bertindak sebagai orkestrator:
+1. **`ModalTambahKegiatan.tsx`** & **`ModalEditKegiatan.tsx`**
+2. Memanfaatkan subkomponen di `components/modal/parts/`:
+   - **`MemberPicker.tsx`**: Pemilihan multi-PJ dan toggle Seluruh Tim.
+   - **`DateRangePicker.tsx`**: Validasi rentang tanggal dan jam operasional.
+   - **`FileUploader.tsx`**: Upload berkas baru / preview lampiran tersimpan.
 
 ---
 

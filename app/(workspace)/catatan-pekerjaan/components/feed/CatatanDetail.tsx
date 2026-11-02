@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/app/lib/supabase/client";
 import { Link2, Printer, Edit3, CheckCircle2, Clock, Calendar, ExternalLink, Loader2, Trash2, Paperclip } from "lucide-react";
-import type { Catatan } from "./CatatanList";
+import type { Catatan } from "@/types/kegiatan";
+import { getDurationInfo } from "@/lib/utils/duration";
 import dynamic from "next/dynamic";
 
 const ModalEditKegiatan = dynamic(
@@ -43,15 +44,10 @@ export default function CatatanDetail({
     const canDelete = isAdmin || isAssignee;
 
     // Deteksi durasi multi-hari
-    const startStr = String(catatan.tanggal || catatan.created_at || "").slice(0, 10);
-    const endStr = catatan.tanggal_selesai ? String(catatan.tanggal_selesai).slice(0, 10) : startStr;
-    const isMultiDay = Boolean(startStr && endStr && endStr > startStr);
-    const diffDays = isMultiDay
-        ? Math.round(
-            (new Date(endStr + "T00:00:00").getTime() - new Date(startStr + "T00:00:00").getTime()) /
-            (1000 * 60 * 60 * 24)
-        ) + 1
-        : 1;
+    const { startStr, endStr, isMultiDay, daysCount } = getDurationInfo(
+        catatan.tanggal || catatan.created_at,
+        catatan.tanggal_selesai
+    );
 
     const handleToggleStatus = async () => {
         if (!canUpdateStatus) {
@@ -195,7 +191,7 @@ export default function CatatanDetail({
                             {isMultiDay ? (
                                 <>
                                     <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                    <span>{startStr} s/d {endStr} ({diffDays} hari)</span>
+                                    <span>{startStr} s/d {endStr} ({daysCount} hari)</span>
                                 </>
                             ) : (
                                 <>

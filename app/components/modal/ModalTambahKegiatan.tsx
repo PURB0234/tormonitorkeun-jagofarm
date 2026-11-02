@@ -4,20 +4,18 @@ import { useState, useEffect } from "react";
 import {
     X,
     FileText,
-    Calendar,
     MapPin,
-    Clock,
-    UploadCloud,
-    Image as ImageIcon,
     Link2,
     BookmarkCheck,
     ChevronDown,
-    Check,
     Loader2,
 } from "lucide-react";
 import { createClient } from "@/app/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { DAFTAR_LOKASI } from "@/app/lib/constants";
+import MemberPicker from "./parts/MemberPicker";
+import DateRangePicker from "./parts/DateRangePicker";
+import FileUploader from "./parts/FileUploader";
 
 type ModalProps = {
     isOpen: boolean;
@@ -53,6 +51,11 @@ export default function ModalTambahKegiatan({ isOpen, onClose, onSuccess }: Moda
     const minMonthStart = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-01";
 
     const toggleMember = (id: string) => {
+        if (isAllTeam) {
+            setIsAllTeam(false);
+            setSelectedMemberIds([id]);
+            return;
+        }
         setSelectedMemberIds((prev) => {
             const next = prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id];
             setIsAllTeam(members.length > 0 && next.length === members.length);
@@ -233,140 +236,47 @@ export default function ModalTambahKegiatan({ isOpen, onClose, onSuccess }: Moda
                     </div>
 
                     {/* Penanggung Jawab (Multi-PJ) */}
+                    <MemberPicker
+                        members={members}
+                        selectedMemberIds={selectedMemberIds}
+                        isAllTeam={isAllTeam}
+                        onToggleMember={toggleMember}
+                        onToggleAllTeam={toggleAllTeam}
+                    />
+
+                    {/* Rentang Tanggal & Waktu Pelaksanaan */}
+                    <DateRangePicker
+                        tanggal={tanggal}
+                        setTanggal={setTanggal}
+                        tanggalSelesai={tanggalSelesai}
+                        setTanggalSelesai={setTanggalSelesai}
+                        waktuMulai={waktuMulai}
+                        setWaktuMulai={setWaktuMulai}
+                        waktuSelesai={waktuSelesai}
+                        setWaktuSelesai={setWaktuSelesai}
+                        minDate={minMonthStart}
+                    />
+
+                    {/* Lokasi */}
                     <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                            <label className="font-bold text-gray-800">
-                                Penanggung Jawab <span className="text-red-500">*</span>
-                            </label>
-                            <span className="text-[11px] text-gray-500">
-                                {selectedMemberIds.length} dipilih
-                            </span>
-                        </div>
-
-                        <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 border border-gray-200 rounded-lg">
-                            <button
-                                type="button"
-                                onClick={toggleAllTeam}
-                                className={
-                                    "px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer " +
-                                    (isAllTeam
-                                        ? "bg-[#1E5E35] text-white"
-                                        : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100")
-                                }
+                        <label className="block font-bold text-gray-800 mb-1.5">
+                            Lokasi / Fasilitas Operasional <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                            <MapPin className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                            <select
+                                value={lokasi}
+                                onChange={(e) => setLokasi(e.target.value)}
+                                required
+                                className="w-full appearance-none pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-xs bg-white text-gray-900 outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600 cursor-pointer"
                             >
-                                Seluruh Tim
-                            </button>
-
-                            {members.map((m) => {
-                                const isSelected = selectedMemberIds.includes(m.id);
-                                const name = m.name || m.full_name || m.email?.split("@")[0] || "Anggota";
-                                return (
-                                    <button
-                                        key={m.id}
-                                        type="button"
-                                        onClick={() => toggleMember(m.id)}
-                                        className={
-                                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer " +
-                                            (isSelected
-                                                ? "bg-[#1E5E35] text-white"
-                                                : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100")
-                                        }
-                                    >
-                                        {isSelected && <Check className="w-3 h-3" />}
-                                        <span>{name}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Rentang Tanggal Pelaksanaan */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                            <label className="block font-bold text-gray-800 mb-1.5">
-                                Dari Tanggal <span className="text-red-500">*</span>
-                            </label>
-                            <div className="relative">
-                                <Calendar className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                <input
-                                    type="date"
-                                    required
-                                    min={minMonthStart}
-                                    value={tanggal}
-                                    onChange={(e) => {
-                                        const val = e.target.value;
-                                        setTanggal(val);
-                                        if (tanggalSelesai < val) setTanggalSelesai(val);
-                                    }}
-                                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600"
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block font-bold text-gray-800 mb-1.5">
-                                Sampai Tanggal <span className="text-red-500">*</span>
-                            </label>
-                            <div className="relative">
-                                <Calendar className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                <input
-                                    type="date"
-                                    required
-                                    min={tanggal}
-                                    value={tanggalSelesai}
-                                    onChange={(e) => setTanggalSelesai(e.target.value)}
-                                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Waktu Pelaksanaan & Lokasi */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                            <label className="block font-bold text-gray-800 mb-1.5">
-                                Waktu Pelaksanaan (Mulai - Selesai) <span className="text-red-500">*</span>
-                            </label>
-                            <div className="flex items-center gap-1.5">
-                                <input
-                                    type="time"
-                                    required
-                                    value={waktuMulai}
-                                    onChange={(e) => setWaktuMulai(e.target.value)}
-                                    className="w-full px-2 py-2 border border-gray-300 rounded-lg text-xs text-center outline-hidden focus:border-green-600"
-                                />
-                                <span className="text-gray-400 text-[11px] font-medium shrink-0">s/d</span>
-                                <input
-                                    type="time"
-                                    required
-                                    value={waktuSelesai}
-                                    onChange={(e) => setWaktuSelesai(e.target.value)}
-                                    className="w-full px-2 py-2 border border-gray-300 rounded-lg text-xs text-center outline-hidden focus:border-green-600"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Lokasi */}
-                        <div>
-                            <label className="block font-bold text-gray-800 mb-1.5">
-                                Lokasi / Fasilitas Operasional <span className="text-red-500">*</span>
-                            </label>
-                            <div className="relative">
-                                <MapPin className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                                <select
-                                    value={lokasi}
-                                    onChange={(e) => setLokasi(e.target.value)}
-                                    required
-                                    className="w-full appearance-none pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-xs bg-white text-gray-900 outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-600 cursor-pointer"
-                                >
-                                    {DAFTAR_LOKASI.map((loc) => (
-                                        <option key={loc} value={loc}>
-                                            {loc}
-                                        </option>
-                                    ))}
-                                </select>
-                                <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                            </div>
+                                {DAFTAR_LOKASI.map((loc) => (
+                                    <option key={loc} value={loc}>
+                                        {loc}
+                                    </option>
+                                ))}
+                            </select>
+                            <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                         </div>
                     </div>
 
@@ -386,50 +296,11 @@ export default function ModalTambahKegiatan({ isOpen, onClose, onSuccess }: Moda
                     </div>
 
                     {/* Upload Bukti / Lampiran */}
-                    <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                            <label className="font-bold text-gray-800">
-                                Upload Bukti & Lampiran <span className="text-gray-400 font-normal">(Opsional)</span>
-                            </label>
-                            <span className="text-[11px] text-gray-400 font-mono">Maks. 25MB</span>
-                        </div>
-                        <input
-                            type="file"
-                            id="file-tambah-kegiatan"
-                            className="hidden"
-                            accept="image/*,.pdf,.csv"
-                            onChange={(e) => setFile(e.target.files?.[0] || null)}
-                        />
-                        {!file ? (
-                            <label
-                                htmlFor="file-tambah-kegiatan"
-                                className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center bg-gray-50/50 hover:bg-gray-50 cursor-pointer transition-colors block"
-                            >
-                                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-1">
-                                    <UploadCloud className="w-4 h-4" />
-                                </div>
-                                <p className="font-semibold text-gray-800 text-xs">Pilih berkas foto atau dokumen bukti</p>
-                                <p className="text-[10px] text-gray-400 mt-0.5">Format JPG, PNG, PDF, atau CSV</p>
-                            </label>
-                        ) : (
-                            <div className="flex items-center justify-between p-3 bg-blue-50/40 border border-blue-200 rounded-xl">
-                                <div className="flex items-center gap-2.5 overflow-hidden">
-                                    <ImageIcon className="w-5 h-5 text-blue-600 shrink-0" />
-                                    <div className="truncate">
-                                        <p className="font-bold text-gray-800 truncate">{file.name}</p>
-                                        <p className="text-[10px] text-gray-400">{(file.size / 1024).toFixed(0)} KB • Siap diunggah</p>
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setFile(null)}
-                                    className="p-1 text-gray-400 hover:text-red-600 rounded-md"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                    <FileUploader
+                        file={file}
+                        setFile={setFile}
+                        inputId="file-tambah-kegiatan"
+                    />
 
                     {/* Tautan Eksternal */}
                     <div>
