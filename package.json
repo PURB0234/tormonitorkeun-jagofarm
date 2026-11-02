@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node -e \"const fs=require('fs'); ['node_modules/@img','node_modules/sharp'].forEach(p=>{const dir='.next/standalone/'+p; if(fs.existsSync(dir)) fs.rmSync(dir,{recursive:true,force:true})})\"",
     "start": "next start",
     "lint": "eslint"
   },

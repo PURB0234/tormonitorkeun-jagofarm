@@ -117,7 +117,23 @@ Hanya ada 2 form modal yang bertindak sebagai orkestrator:
 
 ---
 
-## 5. Event Sinkronisasi Global & Realtime
+## 7. Optimasi Ukuran Hosting & Produksi (Ultra-Lean Standalone)
+
+- **Ukuran Runtime Produksi**: ~24.5 MB (Turun dari ~1 GB, reduksi 97.7%).
+- **`next.config.ts`**:
+  - `output: "standalone"`
+  - `images: { unoptimized: true }` (aplikasi memakai direct CDN/Supabase Storage URLs tanpa dependensi native image processing).
+- **`package.json`**:
+  - Script `postbuild` otomatis membersihkan binary native `@img` dan `sharp` (~11 MB) yang tidak digunakan dari folder `.next/standalone`.
+- **Struktur Deploy Ringan ke Hosting**:
+  1. `.next/standalone` (~23 MB)
+  2. `.next/static` (~1.4 MB) -> ditempatkan di `.next/standalone/.next/static`
+  3. `public` (~20 KB) -> ditempatkan di `.next/standalone/public`
+  Jalankan server via: `node server.js`.
+
+---
+
+## 8. Event Sinkronisasi Global & Realtime
 
 - **Custom Event Sync**:
   ```ts
