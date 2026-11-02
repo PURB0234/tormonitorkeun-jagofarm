@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postbuild": "node -e \"const fs=require('fs'); ['node_modules/@img','node_modules/sharp'].forEach(p=>{const dir='.next/standalone/'+p; if(fs.existsSync(dir)) fs.rmSync(dir,{recursive:true,force:true})}); if(fs.existsSync('.next/static') && fs.existsSync('.next/standalone/.next')) { fs.cpSync('.next/static', '.next/standalone/.next/static', {recursive:true}); } if(fs.existsSync('public') && fs.existsSync('.next/standalone')) { fs.cpSync('public', '.next/standalone/public', {recursive:true}); }\"",
+    "postbuild": "node -e \"const fs=require('fs'); ['node_modules/@img','node_modules/sharp'].forEach(p=>{const dir='.next/standalone/'+p; if(fs.existsSync(dir)) fs.rmSync(dir,{recursive:true,force:true})}); if(fs.existsSync('.next/static')) { if(fs.existsSync('.next/standalone/.next')) fs.cpSync('.next/static', '.next/standalone/.next/static', {recursive:true}); fs.cpSync('.next/static', 'public/_next/static', {recursive:true}); } if(fs.existsSync('public') && fs.existsSync('.next/standalone')) { fs.cpSync('public', '.next/standalone/public', {recursive:true}); }\"",
     "start": "node server.js",
     "lint": "eslint"
   },
